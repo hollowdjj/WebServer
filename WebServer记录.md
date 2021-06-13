@@ -12,3 +12,6 @@
 
 ![](./image/reactor.png)
 
+## MainReactor类
+
+创建监听socket——listenfd并向Channel对象注册该文件描述符以及相应的回调函数。随后将Channel提交给EventLoop对象中的Epoll对象进行监听。Epoll对象中包含了所有需要监听的Channel
