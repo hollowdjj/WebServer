@@ -15,3 +15,15 @@
 ## MainReactor类
 
 创建监听socket——listenfd并向Channel对象注册该文件描述符以及相应的回调函数。随后将Channel提交给EventLoop对象中的Epoll对象进行监听。Epoll对象中包含了所有需要监听的Channel
+
+
+
+## 问题
+
+backlog和最大并发连接数量到底该是什么关系？
+
+Epoll的timeout到底该设置为多少？
+
+如何处理epoll_wait超时？
+
+epoll_wait的maxevents该如何确定？

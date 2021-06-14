@@ -1,6 +1,6 @@
-#include "MainReactor.h"
+#include "HttpServer.h"
 
-MainReactor::MainReactor(int port) : listenfd_(BindAndListen(port))
+HttpServer::HttpServer(int port) : listenfd_(BindAndListen(port))
 {
     assert(listenfd_ != -1);
     port_ = port;
@@ -8,16 +8,17 @@ MainReactor::MainReactor(int port) : listenfd_(BindAndListen(port))
     SetNonBlocking(listenfd_);
 }
 
-void MainReactor::Start()
+void HttpServer::Start()
 {
     /*对监听socket监听可读以及异常事件*/
     listen_channel_->SetEvents(EPOLLIN | EPOLLERR);
     listen_channel_->SetConnHandler([this] { NewConnHandler(); });
     listen_channel_->SetErrorHandler([this]{ ErrorHandler(); });
     /*将listen_channel加入事件循环中*/
+    main_reactor_->AddToEventChannelPool(listen_channel_);
 }
 
-void MainReactor::NewConnHandler()
+void HttpServer::NewConnHandler()
 {
     sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof client_addr;
@@ -34,7 +35,20 @@ void MainReactor::NewConnHandler()
         close(connfd);
         return;
     }
+    ++current_user_num;
     SetNonBlocking(connfd);
     /*将连接socket分发给SubReactor*/
+    auto connfd_channel = std::make_shared<Channel>(connfd,false);
+
+    //需要新建一个处理HTTP数据的类。然后在里面绑定相应的回调函数
+    /*Http server的连接sokcet需要监听可读、可写、断开连接以及错误事件*/
+    connfd_channel->SetEvents(EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLERR);
+    
+    /*这里还要考虑一下如何分发连接socket*/
+
+}
+
+void HttpServer::ErrorHandler()
+{
 
 }
