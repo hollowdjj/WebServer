@@ -52,6 +52,9 @@ public:
     /*向线程池中添加任务*/
     template<typename F,typename... Args>
     auto AddTaskToPool(F&& f,Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
+
+    /*返回线程池中的线程数量*/
+    decltype(workers_.size()) size() {return workers_.size();};
 };
 
 

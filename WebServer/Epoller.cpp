@@ -4,7 +4,7 @@
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
-const int kEpollTimeOut = 10000;             //epoll超时事件
+const int kEpollTimeOut = 10000;             //epoll超时时间
 const int kMaxActiveEventNum = 4096;         //最多监听4096个事件
 
 Epoller::Epoller() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
@@ -18,7 +18,7 @@ Epoller::Epoller() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
     active_events_.resize(kMaxActiveEventNum);
 }
 
-void Epoller::AddEpollEvent(std::shared_ptr<Channel> event_channel)
+bool Epoller::AddEpollEvent(std::shared_ptr<Channel> event_channel)
 {
     int fd = event_channel->GetFd();
     epoll_event event;
@@ -28,13 +28,20 @@ void Epoller::AddEpollEvent(std::shared_ptr<Channel> event_channel)
     if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&event) < 0)
     {
         std::cout<<"epoll add error: "<<errno<<std::endl;
-        return;
+        return false;
+    }
+    else if(current_channel_num_ >= kMaxUserNum)
+    {
+        std::cout<<"add event to full SubReactor"<<std::endl;
+        return false;
     }
     /*向内核epoll事件表添加事件成功后才能将事件添加到事件池中*/
     events_channel_pool_[event.data.fd] = event_channel;
+    ++current_channel_num_;
+    return true;
 }
 
-void Epoller::ModEpollEvent(std::shared_ptr<Channel> event_channel)
+bool Epoller::ModEpollEvent(std::shared_ptr<Channel> event_channel)
 {
     int fd = event_channel->GetFd();
     epoll_event event;
@@ -44,12 +51,14 @@ void Epoller::ModEpollEvent(std::shared_ptr<Channel> event_channel)
     if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&event) < 0)
     {
         std::cout<<"epoll mod error: "<<errno<<std::endl;
+        return false;
     }
     /*只有修改内核epoll事件表成功后才能修改事件池*/
     //events_channel_poll_[fd] = event_channel;
+    return true;
 }
 
-void Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
+bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
 {
     int fd = event_channel->GetFd();
     epoll_event event;
@@ -59,9 +68,11 @@ void Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
     if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,&event)<0)
     {
         std::cout<<"epoll del error: "<<errno<<std::endl;
-        return;
+        return false;
     }
     events_channel_pool_[fd].reset();
+    --current_channel_num_;
+    return true;
 }
 
 std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()

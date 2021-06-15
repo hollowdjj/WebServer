@@ -1,6 +1,7 @@
 #include "HttpServer.h"
 
-HttpServer::HttpServer(int port) : listenfd_(BindAndListen(port))
+HttpServer::HttpServer(int port,std::shared_ptr<EventLoop> main_reactor)
+            : listenfd_(BindAndListen(port)),main_reactor_(main_reactor)
 {
     assert(listenfd_ != -1);
     port_ = port;
@@ -14,8 +15,17 @@ void HttpServer::Start()
     listen_channel_->SetEvents(EPOLLIN | EPOLLERR);
     listen_channel_->SetConnHandler([this] { NewConnHandler(); });
     listen_channel_->SetErrorHandler([this]{ ErrorHandler(); });
-    /*将listen_channel加入事件循环中*/
+
+    /*将listen_channel加入事件循环*/
     main_reactor_->AddToEventChannelPool(listen_channel_);
+
+    /*构造SubReactor并开启事件循环*/
+    auto sub_reactor_num = sub_thread_pool->size();
+    for (decltype(sub_reactor_num) i = 0; i < sub_reactor_num; ++i)
+    {
+        sub_reactors_.emplace_back(std::make_shared<EventLoop>());
+        sub_thread_pool->AddTaskToPool([this,i](){this->sub_reactors_[i]->StartLoop();});
+    }
 }
 
 void HttpServer::NewConnHandler()
@@ -50,5 +60,5 @@ void HttpServer::NewConnHandler()
 
 void HttpServer::ErrorHandler()
 {
-
+    std::cout<<"get an error form listen socket: "<<errno<<std::endl;
 }
