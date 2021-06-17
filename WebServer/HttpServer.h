@@ -11,6 +11,7 @@
 #include "Channel.h"
 #include "Utility.h"
 #include <EventLoop.h>
+#include "HttpData.h"
 
 /*！
 @Author: DJJ
@@ -30,25 +31,28 @@ private:
     int current_user_num = 0;                               //当前用户数量
     std::shared_ptr<EventLoop> main_reactor_;               //MainReactor
     std::vector<std::shared_ptr<EventLoop>> sub_reactors_;  //SubReactor
-    std::shared_ptr<ThreadPool> sub_thread_pool;            //管理子线程的线程池
+    ThreadPool& sub_thread_pool_;                           //管理子线程的线程池
 public:
     /*限制对象数量并禁止复制和赋值*/
-    friend HttpServer* CreateMainReactor(int port,std::shared_ptr<EventLoop> main_reactor);
+    friend HttpServer* CreateMainReactor(int port,std::shared_ptr<EventLoop> main_reactor
+                                         ,ThreadPool& sub_thread_pool);
     HttpServer(const HttpServer&) = delete;
     HttpServer& operator=(const HttpServer&) = delete;
 
     void Start();
 private:
-    explicit HttpServer(int port,std::shared_ptr<EventLoop> main_reactor);   //私有构造函数以限制对象的数量
+    explicit HttpServer(int port,std::shared_ptr<EventLoop> main_reactor
+                        ,ThreadPool& sub_thread_pool);                       //私有构造函数以限制对象的数量
     void NewConnHandler();                                                   //监听socket可读事件就绪的回调函数
     void ErrorHandler();                                                     //监听socket错误处理的回调函数
 };
 
 
 inline
-HttpServer* CreateMainReactor(int port,std::shared_ptr<EventLoop> main_reactor)
+HttpServer* CreateMainReactor(int port,std::shared_ptr<EventLoop> main_reactor
+                              ,ThreadPool& sub_thread_pool)
 {
-    static auto server = new HttpServer(port,main_reactor);
+    static auto server = new HttpServer(port,main_reactor,sub_thread_pool);
     return server;
 }
 #endif //WEBSERVER_HTTPSERVER_H

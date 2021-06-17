@@ -52,6 +52,8 @@ public:
     {
         return event_pool_->DelEpollEvent(event_channel);
     }
+
+    int EventSize() {return event_pool_->size();}
 };
 
 

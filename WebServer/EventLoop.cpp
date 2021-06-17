@@ -1,6 +1,9 @@
 #include "EventLoop.h"
 
+EventLoop::EventLoop() : event_pool_(std::make_shared<Epoller>())
+{
 
+}
 EventLoop::~EventLoop()
 {
     stop_ = true;

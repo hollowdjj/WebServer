@@ -1,11 +1,12 @@
 #include "HttpServer.h"
 
-HttpServer::HttpServer(int port,std::shared_ptr<EventLoop> main_reactor)
-            : listenfd_(BindAndListen(port)),main_reactor_(main_reactor)
+HttpServer::HttpServer(int port,std::shared_ptr<EventLoop> main_reactor
+        ,ThreadPool& sub_thread_pool)
+            : listenfd_(BindAndListen(port)),main_reactor_(main_reactor),sub_thread_pool_(sub_thread_pool)
+            ,listen_channel_(std::make_shared<Channel>(listenfd_,true))
 {
     assert(listenfd_ != -1);
     port_ = port;
-    listen_channel_ = std::make_shared<Channel>(listenfd_,true);
     SetNonBlocking(listenfd_);
 }
 
@@ -20,11 +21,11 @@ void HttpServer::Start()
     main_reactor_->AddToEventChannelPool(listen_channel_);
 
     /*构造SubReactor并开启事件循环*/
-    auto sub_reactor_num = sub_thread_pool->size();
+    auto sub_reactor_num = sub_thread_pool_.size();
     for (decltype(sub_reactor_num) i = 0; i < sub_reactor_num; ++i)
     {
         sub_reactors_.emplace_back(std::make_shared<EventLoop>());
-        sub_thread_pool->AddTaskToPool([this,i](){this->sub_reactors_[i]->StartLoop();});
+        sub_thread_pool_.AddTaskToPool([this,i](){this->sub_reactors_[i]->StartLoop();});
     }
 }
 
@@ -50,12 +51,20 @@ void HttpServer::NewConnHandler()
     /*将连接socket分发给SubReactor*/
     auto connfd_channel = std::make_shared<Channel>(connfd,false);
 
-    //需要新建一个处理HTTP数据的类。然后在里面绑定相应的回调函数
     /*Http server的连接sokcet需要监听可读、可写、断开连接以及错误事件*/
     connfd_channel->SetEvents(EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLERR);
-    
-    /*这里还要考虑一下如何分发连接socket*/
 
+    /*将连接socket分发给事件最少的SubReactor*/
+    //main_reactor_->AddToEventChannelPool(connfd_channel);
+    //auto s = new HttpData(main_reactor_,connfd_channel);
+    auto target_sub_reactor = sub_reactors_[0];
+    for (int i = 1; i < sub_reactors_.size(); ++i)
+    {
+        if(sub_reactors_[i]->EventSize() < target_sub_reactor->EventSize())
+            target_sub_reactor = sub_reactors_[i];
+    }
+    auto s = new HttpData(target_sub_reactor,connfd_channel);
+    target_sub_reactor->AddToEventChannelPool(connfd_channel);
 }
 
 void HttpServer::ErrorHandler()

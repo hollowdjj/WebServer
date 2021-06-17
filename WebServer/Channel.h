@@ -61,6 +61,7 @@ public:
     /*根据revents_调用相应的回调函数*/
     void CallReventsHandlers();
 private:
+    /*回调函数的调用*/
     void CallReadHandler()
     {
         if(ReadHandler_) ReadHandler_();
@@ -68,7 +69,7 @@ private:
     }
     void CallWriteHandler()
     {
-        if(WriteHandler_) WriteHandler_;
+        if(WriteHandler_) WriteHandler_();
         else std::cout<<"write handler has not been registered yet!"<<std::endl;
     }
     void CallErrorHandler()

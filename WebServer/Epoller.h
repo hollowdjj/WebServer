@@ -28,6 +28,7 @@ private:
     int current_channel_num_ = 0;                                 //事件池中的事件数量
     std::vector<epoll_event> active_events_;                      //就绪事件
     std::shared_ptr<Channel> events_channel_pool_[kMaxUserNum];   //事件池
+    std::mutex mutex_;                                            //互斥锁
 public:
     Epoller();
 
@@ -38,6 +39,11 @@ public:
     std::vector<std::shared_ptr<Channel>> GetActiveEvents();      //返回就绪事件
     int GetEpollfd(){return epollfd_;}                            //返回epoll内核事件表
     bool empty() {return current_channel_num_ == 0;}              //判断事件池是否为空
+    int size()
+    {
+        std::unique_lock<std::mutex> lcoker(mutex_);
+        return current_channel_num_;                               //返回事件池中的事件数量
+    }
 };
 
 

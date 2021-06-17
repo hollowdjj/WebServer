@@ -19,6 +19,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <future>
+#include <iostream>
 
 /*！
 @Author: DJJ
@@ -57,5 +58,24 @@ public:
     decltype(workers_.size()) size() {return workers_.size();};
 };
 
+/*模板成员函数的定义也必须写在头文件中*/
+template<typename F,typename... Args>
+auto ThreadPool::AddTaskToPool(F&& f,Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>
+{
+    using return_type = typename std::result_of<F(Args...)>::type;
+    auto task = std::make_shared<std::packaged_task<return_type()>>
+            (std::bind(std::forward<F>(f),std::forward<Args>(args)...));
+    std::future<return_type> res = task->get_future();
 
+    {
+        std::unique_lock<std::mutex> locker(mutex_);
+        if(stop_)
+            throw std::runtime_error("add task to a stoped threadpool");
+
+        tasks_.emplace([task](){(*task)();});
+    }
+
+    cond_.notify_one();
+    return res;
+}
 #endif

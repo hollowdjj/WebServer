@@ -4,7 +4,7 @@ int SetNonBlocking(int fd)
 {
     int old_option = fcntl(fd,F_GETFL);
     int new_option = old_option | O_NONBLOCK;
-    assert(fcntl(fd,F_SETFL,new_option) != -1);
+    fcntl(fd,F_SETFL,new_option);
     return old_option;
 }
 
@@ -12,14 +12,22 @@ int BindAndListen(int port)
 {
     if(port<0 || port > 65535) return -1;
     int listenfd = socket(PF_INET,SOCK_STREAM,0);
-    if(listenfd == -1) return -1;
-
-    auto close_return = [&listenfd](){ close(listenfd);return -1;};
+    if(listenfd == -1)
+    {
+        std::cout<<"create socket error: "<< strerror(errno)<<std::endl;
+        close(listenfd);
+        return -1;
+    }
 
     /*设置地址重用，实现端口复用，一般服务器都需要设置*/
     int reuse = 1;
     int res = setsockopt(listenfd,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof reuse);
-    if(res == -1) close_return();
+    if(res == -1)
+    {
+        std::cout<<"set socketpot error: "<< strerror(errno)<<std::endl;
+        close(listenfd);
+        return -1;
+    }
 
     /*绑定地址*/
     sockaddr_in server_addr;
@@ -32,11 +40,21 @@ int BindAndListen(int port)
      */
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     res = bind(listenfd,reinterpret_cast<sockaddr*>(&server_addr),sizeof server_addr);
-    if(res == -1) close_return();
+    if(res == -1)
+    {
+        std::cout<<"bind error: "<< strerror(errno)<<std::endl;
+        close(listenfd);
+        return -1;
+    }
     
     /*监听队列长度为2048*/
     res = listen(listenfd,2048);
-    if(res == -1) close_return();
+    if(res == -1)
+    {
+        std::cout<<"listen: "<< strerror(errno)<<std::endl;
+        close(listenfd);
+        return -1;
+    }
 
     return listenfd;
 }
@@ -57,7 +75,7 @@ ThreadPool::ThreadPool(size_t thread_num) : stop_(false)
                                               只要stop_ == true即线程池已经停止使用了就一直休眠
                                               当stop_ == false，即线程池开启时，还要任务队列不为空才会唤醒是，否则休眠
                                            */
-                                          cond_.wait(locker,[this](){return this->stop_ || !this->tasks_.empty();});
+                                          this->cond_.wait(locker,[this](){return this->stop_ || !this->tasks_.empty();});
                                           /*当stop_为true且任务队列为空时，线程会被唤醒，此时退出*/
                                           if(this->stop_ && this->tasks_.empty()) return;
 
@@ -68,26 +86,6 @@ ThreadPool::ThreadPool(size_t thread_num) : stop_(false)
                                   }
                               });
     }
-}
-
-template<typename F,typename... Args>
-auto ThreadPool::AddTaskToPool(F&& f,Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>
-{
-    using return_type = typename std::result_of<F(Args...)>::type;
-    auto task = std::make_shared<std::packaged_task<return_type>>
-            (std::bind(std::forward<F>(f),std::forward<Args>(args)...));
-    std::future<return_type> res = task->get_future();
-
-    {
-        std::unique_lock<std::mutex> locker(mutex_);
-        if(stop_)
-            throw std::runtime_error("add task to a stoped threadpool");
-
-        tasks_.emplace([task](){(*task)();});
-    }
-
-    cond_.notify_one();
-    return res;
 }
 
 ThreadPool::~ThreadPool()
