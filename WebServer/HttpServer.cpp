@@ -50,9 +50,12 @@ void HttpServer::NewConnHandler()
     SetNonBlocking(connfd);
     /*将连接socket分发给SubReactor*/
     auto connfd_channel = std::make_shared<Channel>(connfd,false);
-
-    /*Http server的连接sokcet需要监听可读、可写、断开连接以及错误事件*/
-    connfd_channel->SetEvents(EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLERR);
+    /*!
+        Http server的连接sokcet需要监听可读、可写、断开连接以及错误事件
+        但是需要注意的是，不要一开始就注册可写事件。因为只要connfd只要不是阻塞的它就是可写的
+        因此，需要在完整读取了客户端的数据之后再注册可写事件，否则会一直触发可写事件
+     */
+    connfd_channel->SetEvents(EPOLLIN | EPOLLRDHUP | EPOLLERR);
 
     /*将连接socket分发给事件最少的SubReactor*/
     //main_reactor_->AddToEventChannelPool(connfd_channel);

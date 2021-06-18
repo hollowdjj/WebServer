@@ -8,3 +8,4 @@ include_directories(./)
 set(SRC_LIST main.cpp Acceptor.cpp Channel.cpp EventLoop.cpp HttpServer.cpp Utility.cpp Epoller.cpp HttpData.cpp)
 
 add_executable(WebServer ${SRC_LIST})
+add_executable(client ./test/HttpClient.cpp)
