@@ -21,11 +21,15 @@ void HttpData::ReadHandler()
     int fd = connfd_channel_->GetFd();
     while(true)
     {
-        /*fd是非阻塞的那么recv就是非阻塞调用。缓冲区中无可读数据时，立即返回EWOULDBLOCK*/
+        /*fd是非阻塞的那么recv就是非阻塞调用。*/
         ssize_t ret = recv(fd,buffer,sizeof buffer,0);
         if(ret < 0)
         {
-            /*错误代码为EAGAIN或EWOULDBLOCK时，表示数据已经读取完毕*/
+            /*!
+                ET模式下，连接socket的可读事件就绪，表明缓冲区中有数据可读。所以，不用考虑
+                那种由于一开始就没有数据可读从而返回EWOULDBLOCK的情况。当错误代码为EAGAIN
+                或EWOULDBLOCK时，我们就认为数据已经读取完毕。
+             */
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 /*数据读完后，服务端准备向客户端写数据。此时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
