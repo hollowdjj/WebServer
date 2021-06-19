@@ -14,7 +14,7 @@ int BindAndListen(int port)
     int listenfd = socket(PF_INET,SOCK_STREAM,0);
     if(listenfd == -1)
     {
-        std::cout<<"create socket error: "<< strerror(errno)<<std::endl;
+        printf("create socket error: %s\n", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -24,7 +24,7 @@ int BindAndListen(int port)
     int res = setsockopt(listenfd,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof reuse);
     if(res == -1)
     {
-        std::cout<<"set socketpot error: "<< strerror(errno)<<std::endl;
+        printf("set socketpot error: %s\n",strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -42,7 +42,7 @@ int BindAndListen(int port)
     res = bind(listenfd,reinterpret_cast<sockaddr*>(&server_addr),sizeof server_addr);
     if(res == -1)
     {
-        std::cout<<"bind error: "<< strerror(errno)<<std::endl;
+        printf("bind error: %s\n",strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -51,7 +51,7 @@ int BindAndListen(int port)
     res = listen(listenfd,2048);
     if(res == -1)
     {
-        std::cout<<"listen: "<< strerror(errno)<<std::endl;
+        printf("listen error: %s\n",strerror(errno));
         close(listenfd);
         return -1;
     }

@@ -11,9 +11,7 @@ EventLoop::~EventLoop()
 
 void EventLoop::StartLoop()
 {
-    stop_ = false;
     std::vector<std::shared_ptr<Channel>> ret;
-
     while(!stop_)
     {
         ret.clear();

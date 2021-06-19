@@ -21,7 +21,7 @@ class EventLoop {
 private:
     std::mutex mutex_;                         //互斥锁
     std::condition_variable cond_;             //条件变量
-    bool stop_ = true;                         //指示SubReactor是否工作，默认为停止工作
+    bool stop_ = false;                        //指示SubReactor是否工作，默认为正在工作
     std::shared_ptr<Epoller> event_pool_;      //每个EventLoop都有一个事件池
 public:
     EventLoop();
@@ -29,6 +29,14 @@ public:
 
     /*循环调用GetActiveEvent以获取就绪事件。随后调用这些事件的回调函数*/
     void StartLoop();
+
+    /*SubReactor停止工作*/
+    void Quit()
+    {
+        event_pool_->ClearEpoller();
+        stop_ = true;
+        cond_.notify_all();
+    };
 
     /*增　改　删*/
     bool AddToEventChannelPool(std::shared_ptr<Channel> event_channel)
@@ -52,8 +60,6 @@ public:
     {
         return event_pool_->DelEpollEvent(event_channel);
     }
-
-    int EventSize() {return event_pool_->size();}
 };
 
 

@@ -65,27 +65,27 @@ private:
     void CallReadHandler()
     {
         if(ReadHandler_) ReadHandler_();
-        else std::cout<<"read handler has not been registered yet!"<<std::endl;
+        else printf("read handler has not been registered yet!\n");
     }
     void CallWriteHandler()
     {
         if(WriteHandler_) WriteHandler_();
-        else std::cout<<"write handler has not been registered yet!"<<std::endl;
+        else printf("write handler has not been registered yet!\n");
     }
     void CallErrorHandler()
     {
         if(ErrorHandler_) ErrorHandler_();
-        else std::cout<<"error handler has not been registered yet!"<<std::endl;
+        else printf("error handler has not been registered yet!\n");
     }
     void CallConnHandler()
     {
         if(ConnHandler_) ConnHandler_();
-        else std::cout<<"connect handler has not been registered yet!"<<std::endl;
+        else printf("connect handler has not been registered yet!\n");
     }
     void CallDisconnHandler()
     {
         if(DisconnHandler_) DisconnHandler_();
-        else std::cout<<"disconnect handler has not been registered yet!"<<std::endl;
+        else printf("disconnect handler has not been registered yet!\n");
     }
 };
 

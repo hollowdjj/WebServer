@@ -1,6 +1,7 @@
 #include "HttpData.h"
 
 using namespace std::placeholders;
+
 HttpData::HttpData(std::shared_ptr<EventLoop> sub_reactor, std::shared_ptr<Channel> connfd_channel)
                         :sub_reactor_(std::move(sub_reactor)),connfd_channel_(std::move(connfd_channel))
 {
@@ -18,6 +19,7 @@ void HttpData::ReadHandler()
 {
     /*读取数据并显示。ET模式下需一次性把数据读完*/
     char buffer[4096];
+    memset(buffer,'\0',4096);
     int fd = connfd_channel_->GetFd();
     while(true)
     {
@@ -36,6 +38,7 @@ void HttpData::ReadHandler()
                 __uint32_t old_option = connfd_channel_->GetEvents();
                 __uint32_t new_option = old_option | EPOLLOUT | ~EPOLLIN;
                 connfd_channel_->SetEvents(new_option);
+                printf("get content: %s from socket %d\n",buffer,fd);
                 break;
             }
             /*否则，发生错误，此时关闭连接*/
@@ -49,14 +52,14 @@ void HttpData::ReadHandler()
         }
         else
         {
-            std::cout<<"get "<<ret<<" bytes from " <<fd<<std::endl;
+            //std::cout<<"get "<<ret<<" bytes from " <<fd<<" which is: "<<buffer<<std::endl;
         }
     }
 }
 
 void HttpData::WriteHandler()
 {
-    std::cout<<"write data"<<std::endl;
+    printf("write data\n");
     /*写完数据之后，需要删除注册的EPOLLOUT事件，并重新注册EPOLLIN事件*/
     __uint32_t old_option = connfd_channel_->GetEvents();
     __uint32_t new_option = old_option | EPOLLIN | ~EPOLLOUT;
@@ -65,7 +68,7 @@ void HttpData::WriteHandler()
 
 void HttpData::DisConndHandler()
 {
-    std::cout<<"client disconnect"<<std::endl;
+    printf("client %d disconnect\n",connfd_channel_->GetFd());
     /*客户端断开连接时，服务器端也断开连接。此时，需将连接socket从事件池中删除*/
     sub_reactor_->DelFromEventChannePool(connfd_channel_);
 }
@@ -73,11 +76,11 @@ void HttpData::DisConndHandler()
 void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
 {
     /*获取错误信息*/
-    std::cout<<"get an error from client "<<fd<<" "<<error_num<<" "<<msg<<std::endl;
+    printf("get an error from client: %d\n",fd);
     char error[100];
     socklen_t length = sizeof error;
     memset(error,'\0',100);
-    if(getsockopt(fd,SOL_SOCKET,SO_ERROR,&error,&length)<0) {std::cout<<"get socket error message failed"<<std::endl;}
+    if(getsockopt(fd,SOL_SOCKET,SO_ERROR,&error,&length)<0) { printf("get socket error message failed\n");}
 
     /*向客户端发送错误信息*/
     send(fd,error,length,0);

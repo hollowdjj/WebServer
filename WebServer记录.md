@@ -27,3 +27,7 @@ Epoll的timeout到底该设置为多少？
 如何处理epoll_wait超时？
 
 epoll_wait的maxevents该如何确定？
+
+epoll_wait如何停止？
+
+程序退出的流程该如何设计？

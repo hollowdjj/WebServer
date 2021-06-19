@@ -3,7 +3,7 @@
 
 Channel::Channel(int fd,bool is_listenfd /*false*/) : fd_(fd),is_listenfd_(is_listenfd) {}
 
-Channel::~Channel() {close(fd_);}
+Channel::~Channel() {}
 
 void Channel::CallReventsHandlers()
 {

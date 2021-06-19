@@ -27,12 +27,12 @@ bool Epoller::AddEpollEvent(std::shared_ptr<Channel> event_channel)
     event.events = (event_channel->GetEvents() | EPOLLET);
     if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&event) < 0)
     {
-        std::cout<<"epoll add error: "<<errno<<std::endl;
+        printf("epoll add error: %s", strerror(errno));
         return false;
     }
     else if(current_channel_num_ >= kMaxUserNum)
     {
-        std::cout<<"add event to full SubReactor"<<std::endl;
+        printf("add event to full SubReactor\n");
         return false;
     }
     /*向内核epoll事件表添加事件成功后才能将事件添加到事件池中*/
@@ -50,7 +50,7 @@ bool Epoller::ModEpollEvent(std::shared_ptr<Channel> event_channel)
 
     if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&event) < 0)
     {
-        std::cout<<"epoll mod error: "<<errno<<std::endl;
+        printf("epoll mod error: %s\n", strerror(errno));
         return false;
     }
     /*只有修改内核epoll事件表成功后才能修改事件池*/
@@ -67,9 +67,10 @@ bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
 
     if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,&event)<0)
     {
-        std::cout<<"epoll del error: "<<errno<<std::endl;
+        printf("epoll del error: %s\n", strerror(errno));
         return false;
     }
+    close(fd);
     events_channel_pool_[fd].reset();
     --current_channel_num_;
     return true;
@@ -79,17 +80,16 @@ std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
 {
     while(true)
     {
-        //active_events_.clear();
         int active_event_num = epoll_wait(epollfd_,&active_events_[0],kMaxActiveEventNum,kEpollTimeOut);
         if(active_event_num < 0)
         {
-            std::cout<<"epoll_wait error: "<<errno<<std::endl;
+            printf("eopll wait error: %s\n", strerror(errno));
             return {};
         }
         else if(active_event_num == 0)
         {
             /*epoll_wait超时，这里暂时的处理方式是继续循环*/
-            std::cout<<"epoll_wait timeout"<<std::endl;
+            printf("waiting for active events\n");
             continue;
         }
 
@@ -107,9 +107,17 @@ std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
             }
             else
             {
-                std::cout<<"modification on emtpy Channel Object"<<std::endl;
+                printf("modification on emtpy Channel Object");
             }
         }
         return std::move(ret);
+    }
+}
+
+void Epoller::ClearEpoller()
+{
+    for (auto& i : events_channel_pool_)
+    {
+        if(i) DelEpollEvent(i);
     }
 }
