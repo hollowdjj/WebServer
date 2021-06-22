@@ -35,7 +35,7 @@ private:
     CallBack WriteHandler_;        //写数据的回调函数
     CallBack ErrorHandler_;        //错误处理的回调函数
     CallBack ConnHandler_;         //接受连接的回调函数
-    CallBack DisconnHandler_;      //关闭连接的回调函数
+    //CallBack DisconnHandler_;      //关闭连接的回调函数
 public:
     Channel() = default;
     explicit Channel(int fd,bool is_listenfd = false);
