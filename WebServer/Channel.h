@@ -18,6 +18,9 @@
  1. 注册文件描述符、其上要监听的事件以及相应的回调函数
  2. 根据就绪事件调用相应的回调函数
 
+ 需要注意的是客户端断开连接时，会同时触发可读事件。因此，最好在读数据的回调函数中根据recv函数返回0来判断
+ 客户端是否关闭。
+
 @Date: 2021/6/12 下午5:34
 */
 class Channel {
@@ -56,7 +59,7 @@ public:
     void SetWriteHandler(CallBack write_handler)     {WriteHandler_ = std::move(write_handler);}
     void SetErrorHandler(CallBack error_handler)     {ErrorHandler_ = std::move(error_handler);}
     void SetConnHandler(CallBack conn_handler)       {ConnHandler_ = std::move(conn_handler);}
-    void SetDisconnHandler(CallBack disconn_handler) {DisconnHandler_ = std::move(disconn_handler);}
+    //void SetDisconnHandler(CallBack disconn_handler) {DisconnHandler_ = std::move(disconn_handler);}
 
     /*根据revents_调用相应的回调函数*/
     void CallReventsHandlers();
@@ -82,11 +85,11 @@ private:
         if(ConnHandler_) ConnHandler_();
         else printf("connect handler has not been registered yet!\n");
     }
-    void CallDisconnHandler()
-    {
-        if(DisconnHandler_) DisconnHandler_();
-        else printf("disconnect handler has not been registered yet!\n");
-    }
+//    void CallDisconnHandler()
+//    {
+//        if(DisconnHandler_) DisconnHandler_();
+//        else printf("disconnect handler has not been registered yet!\n");
+//    }
 };
 
 

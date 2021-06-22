@@ -45,10 +45,14 @@ void HttpData::ReadHandler()
             DisConndHandler();
             break;
         }
-        /*一般情况下，recv返回0是由于客户端关闭连接导致的。对connfd注册了专门的关闭连接回调函数，所以这里什么都不做*/
         else if(ret ==0)
         {
+            /*!
+                一般情况下，recv返回0是由于客户端关闭连接导致的。客户端断开连接时，会同时触发可读事件。
+                因此，没有对连接socket注册连接断开的回调函数，而是在此处做关闭连接处理。
+             */
             DisConndHandler();
+            break;
         }
         else
         {

@@ -28,6 +28,7 @@ private:
     int current_channel_num_ = 0;                                 //事件池中的事件数量
     std::vector<epoll_event> active_events_;                      //就绪事件
     std::shared_ptr<Channel> events_channel_pool_[kMaxUserNum];   //事件池
+    bool stop_ = false;                                           //停止监听的标志
 public:
     Epoller();
 
@@ -39,6 +40,7 @@ public:
     int GetEpollfd(){return epollfd_;}                            //返回epoll内核事件表
     bool empty() {return current_channel_num_ == 0;}              //判断事件池是否为空
     void ClearEpoller();                                          //断开所有连接
+    void Stop() {stop_ = true;};                                  //停止监听
 };
 
 

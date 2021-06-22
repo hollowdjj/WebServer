@@ -33,6 +33,7 @@ public:
     /*SubReactor停止工作*/
     void Quit()
     {
+        event_pool_->Stop();
         event_pool_->ClearEpoller();
         stop_ = true;
         cond_.notify_all();

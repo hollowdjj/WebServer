@@ -14,6 +14,6 @@ void Channel::CallReventsHandlers()
         return;
     }
     else if(revents_ & EPOLLOUT) CallWriteHandler();
-    else if(revents_ & EPOLLIN)  CallReadHandler();
-    else if(revents_ & EPOLLRDHUP) CallDisconnHandler();
+    else if(revents_ & (EPOLLIN | EPOLLRDHUP))  CallReadHandler();
+    //else if(revents_ & EPOLLRDHUP) CallDisconnHandler();
 }

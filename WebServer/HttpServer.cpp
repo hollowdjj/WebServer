@@ -81,7 +81,7 @@ void HttpServer::NewConnHandler()
         printf("subreactor %d is handling %d connections\n",i,sub_reactors_[i].second);
         if(sub_reactors_[i].second < target_pair.second)
         {
-            target_pair = sub_reactors_[i];
+            target_pair = sub_reactors_[i];         //sub_reactors_[i];
             index = i;
         }
     }
@@ -89,7 +89,7 @@ void HttpServer::NewConnHandler()
     if(target_pair.first->AddToEventChannelPool(connfd_channel))
     {
         printf("new connection established through socket %d and handled by subreactor %d\n",connfd,index);
-        ++target_pair.second;
+        ++sub_reactors_[index].second;
     }
 }
 

@@ -4,16 +4,15 @@
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
-const int kEpollTimeOut = 10000;             //epoll超时时间
+const int kEpollTimeOut = 10000;             //epoll超时时间(单位为毫秒)
 const int kMaxActiveEventNum = 4096;         //最多监听4096个事件
 
-Epoller::Epoller() : epollfd_(epoll_create(5))
+Epoller::Epoller() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
 {
     /*!
         注意，这里没有使用epoll_create。这是因为，epoll_create函数的size参数只是一个参考
         实际上，内核epoll事件表是会动态增长的，因此没有必要使用epoll_create了
      */
-    //epollfd_ = epoll_create1(EPOLL_CLOEXEC);
     assert(epollfd_ != -1);
     active_events_.resize(kMaxActiveEventNum);
 }
@@ -63,7 +62,8 @@ bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
     int fd = event_channel->GetFd();
     epoll_event event;
     event.data.fd = fd;
-    event.events = (event_channel->GetEvents() | EPOLLET);
+    event.events = 0;
+    //event.events = (event_channel->GetEvents() | EPOLLET);
 
     if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,&event)<0)
     {
@@ -78,7 +78,7 @@ bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
 
 std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
 {
-    while(true)
+    while(!stop_)
     {
         int active_event_num = epoll_wait(epollfd_,&active_events_[0],kMaxActiveEventNum,kEpollTimeOut);
         if(active_event_num < 0)
@@ -89,7 +89,7 @@ std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
         else if(active_event_num == 0)
         {
             /*epoll_wait超时，这里暂时的处理方式是继续循环*/
-            printf("waiting for active events\n");
+            //printf("waiting for active events\n");
             continue;
         }
 
@@ -112,6 +112,7 @@ std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
         }
         return std::move(ret);
     }
+    return {};
 }
 
 void Epoller::ClearEpoller()

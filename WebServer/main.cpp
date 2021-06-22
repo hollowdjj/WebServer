@@ -7,20 +7,20 @@
 std::shared_ptr<EventLoop> main_reactor;
 HttpServer* server;
 
-void CloseServer(int sig)
-{
-    server->Quit();
-    delete server;
-}
+//void CloseServer(int sig)
+//{
+//    server->Quit();
+//    delete server;
+//}
 
 int main()
 {
     /*设置服务器关闭的回调函数*/
-    if(signal(SIGTERM,CloseServer) == SIG_ERR)
-    {
-        printf("set CloseServer handler failed\n");
-        return -1;
-    }
+//    if(signal(SIGTERM,CloseServer) == SIG_ERR)
+//    {
+//        printf("set CloseServer handler failed\n");
+//        return -1;
+//    }
 
     int port = 6688;
     /*创建一个线程池。注意主线程不在线程池中*/
