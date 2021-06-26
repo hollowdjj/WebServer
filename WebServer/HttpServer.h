@@ -25,7 +25,6 @@
 
 @Date: 2021/6/12 下午4:29
 */
-void CloseServer(int sig);
 
 class HttpServer {
 private:

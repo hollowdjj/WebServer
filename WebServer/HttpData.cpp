@@ -10,7 +10,7 @@ HttpData::HttpData(std::shared_ptr<EventLoop> sub_reactor, std::shared_ptr<Chann
         /*设置回调函数*/
         connfd_channel_->SetReadHandler([this](){ReadHandler();});
         connfd_channel_->SetWriteHandler([this](){WriteHandler();});
-        connfd_channel_->SetDisconnHandler([this](){DisConndHandler();});
+        //connfd_channel_->SetDisconnHandler([this](){DisConndHandler();});
         //connfd_channel_->SetErrorHandler(std::bind(&HttpData::ErrorHandler,this,10,10,"1"));
     }
 }

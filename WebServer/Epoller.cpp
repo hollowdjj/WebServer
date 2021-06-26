@@ -63,7 +63,6 @@ bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
     epoll_event event;
     event.data.fd = fd;
     event.events = 0;
-    //event.events = (event_channel->GetEvents() | EPOLLET);
 
     if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,&event)<0)
     {
@@ -83,6 +82,7 @@ std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
         int active_event_num = epoll_wait(epollfd_,&active_events_[0],kMaxActiveEventNum,kEpollTimeOut);
         if(active_event_num < 0)
         {
+            if(errno == EINTR) return {};
             printf("eopll wait error: %s\n", strerror(errno));
             return {};
         }

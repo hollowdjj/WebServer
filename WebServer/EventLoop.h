@@ -16,7 +16,7 @@
 
 @Date: 2021/6/14 下午4:19
 */
-
+//TODO 将subreactor管理的连接数量放在ventLoop中
 class EventLoop {
 private:
     std::mutex mutex_;                         //互斥锁
@@ -33,8 +33,10 @@ public:
     /*SubReactor停止工作*/
     void Quit()
     {
+        /*事件池停止监听工作并清空事件池*/
         event_pool_->Stop();
         event_pool_->ClearEpoller();
+        /*停止标志设置为true并唤醒休眠中的线程以退出while循环*/
         stop_ = true;
         cond_.notify_all();
     };

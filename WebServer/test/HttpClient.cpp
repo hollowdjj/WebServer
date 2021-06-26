@@ -19,6 +19,7 @@
 @Date: 2021/6/18 上午11:13
 */
 
+//TODO 连接经常超时，存在bug
 int SetNonBlocking(int fd)
 {
     int old_option = fcntl(fd,F_GETFL);
@@ -54,14 +55,14 @@ int NonBlockConnect(const char* ip,int port,int timeout)
         return -1;
     }
 
-    /*连接正在进行中时，使用select监听该socket，并在连接成狗建立后清除错误代码*/
+    /*连接正在进行中时，使用poll监听该socket，并在连接成功建立后清除错误代码*/
     pollfd fds[1];
     fds[0].events = POLLOUT;fds[0].revents = 0;
     int res = poll(fds,1, timeout);
     if(res<0)
     {
         /*出错*/
-        printf("connection error: %\n", strerror(errno));
+        printf("connection error: %s\n", strerror(errno));
         close(sockfd);
         return -1;
     }
@@ -105,9 +106,9 @@ int main(int argc,char* argv[])
     int conn_num = 0;
     while(true)
     {
-        if(conn_num >=1) break;
+        if(conn_num >=5) break;
 
-        int temp = NonBlockConnect(ip,port,20);
+        int temp = NonBlockConnect(ip,port,200000);
         if(temp > 0)
         {
             const char* buf = "hello motherfucker!";

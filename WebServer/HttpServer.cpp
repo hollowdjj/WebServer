@@ -81,7 +81,7 @@ void HttpServer::NewConnHandler()
         printf("subreactor %d is handling %d connections\n",i,sub_reactors_[i].second);
         if(sub_reactors_[i].second < target_pair.second)
         {
-            target_pair = sub_reactors_[i];         //sub_reactors_[i];
+            target_pair = sub_reactors_[i];
             index = i;
         }
     }
