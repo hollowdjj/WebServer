@@ -1,6 +1,5 @@
 #include "Epoller.h"
 
-
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
@@ -31,11 +30,12 @@ bool Epoller::AddEpollEvent(std::shared_ptr<Channel> event_channel)
     }
     else if(current_channel_num_ >= kMaxUserNum)
     {
-        printf("add event to full SubReactor\n");
+        printf("add event to full SubReactor!\n");
         return false;
     }
     /*向内核epoll事件表添加事件成功后才能将事件添加到事件池中*/
     events_channel_pool_[event.data.fd] = event_channel;
+    http_data_pool_[event.data.fd] = event_channel->GetHolder();
     ++current_channel_num_;
     return true;
 }
@@ -71,6 +71,7 @@ bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
     }
     close(fd);
     events_channel_pool_[fd].reset();
+    http_data_pool_[fd].reset();
     --current_channel_num_;
     return true;
 }
@@ -82,8 +83,7 @@ std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
         int active_event_num = epoll_wait(epollfd_,&active_events_[0],kMaxActiveEventNum,kEpollTimeOut);
         if(active_event_num < 0)
         {
-            if(errno == EINTR) return {};
-            printf("eopll wait error: %s\n", strerror(errno));
+            if(errno != EINTR) printf("eopll wait error: %s\n", strerror(errno));
             return {};
         }
         else if(active_event_num == 0)

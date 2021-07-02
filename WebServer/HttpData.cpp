@@ -74,7 +74,7 @@ void HttpData::DisConndHandler()
 {
     printf("client %d disconnect\n",connfd_channel_->GetFd());
     /*客户端断开连接时，服务器端也断开连接。此时，需将连接socket从事件池中删除*/
-    sub_reactor_->DelFromEventChannePool(connfd_channel_);
+    sub_reactor_.lock()->DelFromEventChannePool(connfd_channel_);
 }
 
 void HttpData::ErrorHandler(int fd,int error_num,std::string msg)

@@ -16,6 +16,7 @@ HttpServer::~HttpServer()
     /*离开析构函数的函数体后，其余未被主动释放的成员变量才会被自动释放*/
 
 }
+
 void HttpServer::Start()
 {
     /*对监听socket监听可读以及异常事件*/
@@ -23,7 +24,7 @@ void HttpServer::Start()
     listen_channel_->SetConnHandler([this] { NewConnHandler(); });
     listen_channel_->SetErrorHandler([this]{ ErrorHandler(); });
 
-    /*将listen_channel加入事件循环*/
+    /*将listen_channel加入MainReactor中进行监听*/
     main_reactor_->AddToEventChannelPool(listen_channel_);
 
     /*构造SubReactor并开启事件循环*/
@@ -31,7 +32,7 @@ void HttpServer::Start()
     for (decltype(sub_reactor_num) i = 0; i < sub_reactor_num; ++i)
     {
         auto sub_reactor = std::make_shared<EventLoop>();
-        sub_reactors_.emplace_back(std::make_pair(sub_reactor,0));
+        sub_reactors_.emplace_back(sub_reactor);
         sub_thread_pool_.AddTaskToPool([=](){sub_reactor->StartLoop();});
     }
 }
@@ -39,14 +40,15 @@ void HttpServer::Start()
 void HttpServer::Quit()
 {
     main_reactor_->Quit();
-    for (auto& item : sub_reactors_)
+    for (auto& sub_reactors : sub_reactors_)
     {
-        item.first->Quit();
+        sub_reactors->Quit();
     }
 }
 
 void HttpServer::NewConnHandler()
 {
+    /*从监听队列中接受一个连接*/
     sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof client_addr;
     int connfd = accept(listenfd_,reinterpret_cast<sockaddr*>(&client_addr),&client_addr_len);
@@ -55,7 +57,7 @@ void HttpServer::NewConnHandler()
         printf("accept error: %s\n", strerror(errno));
         return;
     }
-    /*限制服务器的最大并发连接数*/
+    //限制服务器的最大并发连接数
     if(current_user_num >= kMaxUserNum)
     {
         printf("max user number limit\n");
@@ -64,6 +66,7 @@ void HttpServer::NewConnHandler()
     }
     ++current_user_num;
     SetNonBlocking(connfd);
+    
     /*将连接socket分发给SubReactor*/
     auto connfd_channel = std::make_shared<Channel>(connfd,false);
     /*!
@@ -73,23 +76,32 @@ void HttpServer::NewConnHandler()
      */
     connfd_channel->SetEvents(EPOLLIN | EPOLLRDHUP | EPOLLERR);
 
-    /*将连接socket分发给事件最少的SubReactor*/
-    auto target_pair = sub_reactors_[0];
-    int index = 0;
-    for (int i = 0; i < sub_reactors_.size(); ++i)
+    //将连接socket分发给事件最少的SubReactor
+    auto target_subreactor = sub_reactors_[0];
+    unsigned long index = 0;
+    std::vector<int> size_of_each;
+    printf("------------------------------------------------------\n");
+    for (decltype(sub_reactors_.size()) i = 0; i < sub_reactors_.size(); ++i)
     {
-        printf("subreactor %d is handling %d connections\n",i,sub_reactors_[i].second);
-        if(sub_reactors_[i].second < target_pair.second)
+        int num =  sub_reactors_[i]->GetConnectionNum();
+        size_of_each.push_back(num);
+        if( num < target_subreactor->GetConnectionNum())
         {
-            target_pair = sub_reactors_[i];
+            target_subreactor = sub_reactors_[i];
             index = i;
         }
     }
-    auto s = new HttpData(target_pair.first,connfd_channel);
-    if(target_pair.first->AddToEventChannelPool(connfd_channel))
+    connfd_channel->SetHolder(std::make_shared<HttpData>(target_subreactor,connfd_channel));
+    if(target_subreactor->AddToEventChannelPool(connfd_channel))
     {
         printf("new connection established through socket %d and handled by subreactor %d\n",connfd,index);
-        ++sub_reactors_[index].second;
+        ++size_of_each[index];
+    }
+
+    /*打印当前每个SubReactor的连接数量*/
+    for (int i = 0; i < size_of_each.size(); ++i)
+    {
+        printf("subreactor %d is handling %d connections\n",i,size_of_each[i]);
     }
 }
 

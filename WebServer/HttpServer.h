@@ -33,7 +33,7 @@ private:
     std::shared_ptr<Channel> listen_channel_;                             //监听socket的Channel
     int current_user_num = 0;                                             //当前用户数量
     std::shared_ptr<EventLoop> main_reactor_;                             //MainReactor
-    std::vector<std::pair<std::shared_ptr<EventLoop>,int>> sub_reactors_; //SubReactor
+    std::vector<std::shared_ptr<EventLoop>> sub_reactors_;                //SubReactor
     ThreadPool& sub_thread_pool_;                                         //管理子线程的线程池
 public:
     /*限制对象数量并禁止复制和赋值*/

@@ -8,6 +8,7 @@
 /*STD Headers*/
 #include <functional>
 #include <iostream>
+#include <memory>
 
 /*User-define Headers*/
 
@@ -18,11 +19,14 @@
  1. 注册文件描述符、其上要监听的事件以及相应的回调函数
  2. 根据就绪事件调用相应的回调函数
 
- 需要注意的是客户端断开连接时，会同时触发可读事件。因此，最好在读数据的回调函数中根据recv函数返回0来判断
+ 需要注意的是，客户端断开连接时，会同时触发可读事件。因此，最好在读数据的回调函数中根据recv函数返回0来判断
  客户端是否关闭。
 
 @Date: 2021/6/12 下午5:34
 */
+
+class HttpData;
+
 class Channel {
 private:
     int fd_;                    //需要监听事件的文件描述符
@@ -35,13 +39,14 @@ private:
     CallBack WriteHandler_;        //写数据的回调函数
     CallBack ErrorHandler_;        //错误处理的回调函数
     CallBack ConnHandler_;         //接受连接的回调函数
-    //CallBack DisconnHandler_;      //关闭连接的回调函数
+
+    std::weak_ptr<HttpData> holder_;  //只有连接socket才需要一个holder，监听socket不需要
 public:
     Channel() = default;
     explicit Channel(int fd,bool is_listenfd = false);
     ~Channel();
 
-    /*getter and setter*/
+    /*getters and setters*/
     void SetFd(int fd)                   {fd_ = fd;}
     int  GetFd()                         {return fd_;}
 
@@ -54,12 +59,14 @@ public:
     void SetIsListenfd(bool is_listenfd) {is_listenfd_ = is_listenfd;}
     bool IsListenfd()                    {return is_listenfd_;}
 
+    void SetHolder(std::shared_ptr<HttpData> event_channel) {holder_ = event_channel;}
+    std::shared_ptr<HttpData> GetHolder() {return holder_.lock();}
+
     /*注册回调函数。std::function是cheap object，pass by value + move就可*/
     void SetReadHandler(CallBack read_handler)       {ReadHandler_ = std::move(read_handler);}
     void SetWriteHandler(CallBack write_handler)     {WriteHandler_ = std::move(write_handler);}
     void SetErrorHandler(CallBack error_handler)     {ErrorHandler_ = std::move(error_handler);}
     void SetConnHandler(CallBack conn_handler)       {ConnHandler_ = std::move(conn_handler);}
-    //void SetDisconnHandler(CallBack disconn_handler) {DisconnHandler_ = std::move(disconn_handler);}
 
     /*根据revents_调用相应的回调函数*/
     void CallReventsHandlers();
@@ -85,11 +92,6 @@ private:
         if(ConnHandler_) ConnHandler_();
         else printf("connect handler has not been registered yet!\n");
     }
-//    void CallDisconnHandler()
-//    {
-//        if(DisconnHandler_) DisconnHandler_();
-//        else printf("disconnect handler has not been registered yet!\n");
-//    }
 };
 
 

@@ -17,7 +17,7 @@ void EventLoop::StartLoop()
         ret.clear();
         /*事件池为空时休眠*/
         {
-            std::unique_lock<std::mutex> locker(mutex_);
+            std::unique_lock<std::mutex> locker(mutex_for_wakeup_);
             cond_.wait(locker,[this](){return !this->event_pool_->empty();});
         }
         /*获取事件池中的就绪事件*/
