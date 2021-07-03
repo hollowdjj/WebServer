@@ -1,9 +1,12 @@
 #include "Channel.h"
 
 
-Channel::Channel(int fd,bool is_listenfd /*false*/) : fd_(fd),is_listenfd_(is_listenfd) {}
+Channel::Channel(int fd,bool is_listenfd /*false*/) : fd_(fd),is_listenfd_(is_listenfd){}
 
-Channel::~Channel() {}
+Channel::~Channel()
+{
+    close(fd_);
+}
 
 void Channel::CallReventsHandlers()
 {
@@ -15,5 +18,4 @@ void Channel::CallReventsHandlers()
     }
     else if(revents_ & EPOLLOUT) CallWriteHandler();
     else if(revents_ & (EPOLLIN | EPOLLRDHUP))  CallReadHandler();
-    //else if(revents_ & EPOLLRDHUP) CallDisconnHandler();
 }

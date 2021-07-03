@@ -23,7 +23,7 @@ private:
     std::condition_variable cond_;             //条件变量
 
     bool stop_ = false;                        //指示Sub/Main-Reactor是否工作，默认为正在工作
-    std::shared_ptr<Epoller> event_pool_;      //每个EventLoop都有一个事件池
+    std::unique_ptr<Epoller> event_pool_;      //每个EventLoop都唯一拥有一个事件池
 
     std::mutex mutex_for_conn_num_;
     int connection_num_;                       //Sub/Main-Reactor管理的连接数量
@@ -53,7 +53,7 @@ public:
     };
 
     /*增　改　删*/
-    bool AddToEventChannelPool(std::shared_ptr<Channel> event_channel)
+    bool AddToEventChannelPool(Channel* event_channel)
     {
         /*添加了事件成功后就需唤醒此SubReactor*/
         if(event_pool_->AddEpollEvent(event_channel))
@@ -67,11 +67,11 @@ public:
         }
         return false;
     }
-    bool ModEventChannelPool(std::shared_ptr<Channel> event_channel)
+    bool ModEventChannelPool(Channel* event_channel)
     {
          return event_pool_->ModEpollEvent(event_channel);
     }
-    bool DelFromEventChannePool(std::shared_ptr<Channel> event_channel)
+    bool DelFromEventChannePool(Channel* event_channel)
     {
         if(event_pool_->DelEpollEvent(event_channel))
         {

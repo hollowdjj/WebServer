@@ -1,10 +1,11 @@
+#include "Channel.h"
+#include "Utility.h"
 #include "HttpServer.h"
+#include "HttpData.h"
 
-
-HttpServer::HttpServer(int port,std::shared_ptr<EventLoop> main_reactor
-        ,ThreadPool& sub_thread_pool)
+HttpServer::HttpServer(int port, EventLoop* main_reactor,ThreadPool* sub_thread_pool)
             : listenfd_(BindAndListen(port)),main_reactor_(main_reactor),sub_thread_pool_(sub_thread_pool)
-            ,listen_channel_(std::make_shared<Channel>(listenfd_,true))
+            ,listen_channel_(new Channel(listenfd_,true))
 {
     assert(listenfd_ != -1);
     port_ = port;
@@ -13,8 +14,13 @@ HttpServer::HttpServer(int port,std::shared_ptr<EventLoop> main_reactor
 
 HttpServer::~HttpServer()
 {
-    /*离开析构函数的函数体后，其余未被主动释放的成员变量才会被自动释放*/
-
+    /*!
+        离开析构函数的函数体后，其余未被主动释放的成员变量才会被自动释放。
+        listen_channel_的生命周期交由main_reactor_管理
+        main_reactor_的生命周期由main函数管理
+        sub_thread_pool_的生命周期同样由main函数管理
+        HttpServer只管理SubReactor的生命周期，这里使用了unique_ptr来自动释放资源
+     */
 }
 
 void HttpServer::Start()
@@ -28,12 +34,13 @@ void HttpServer::Start()
     main_reactor_->AddToEventChannelPool(listen_channel_);
 
     /*构造SubReactor并开启事件循环*/
-    auto sub_reactor_num = sub_thread_pool_.size();
+    auto sub_reactor_num = sub_thread_pool_->size();
     for (decltype(sub_reactor_num) i = 0; i < sub_reactor_num; ++i)
     {
+        /*HttpServer和ThreadPool需要共享SubReactor，故这里使用shared_ptr*/
         auto sub_reactor = std::make_shared<EventLoop>();
+        sub_thread_pool_->AddTaskToPool([=](){sub_reactor->StartLoop();});
         sub_reactors_.emplace_back(sub_reactor);
-        sub_thread_pool_.AddTaskToPool([=](){sub_reactor->StartLoop();});
     }
 }
 
@@ -68,40 +75,42 @@ void HttpServer::NewConnHandler()
     SetNonBlocking(connfd);
     
     /*将连接socket分发给SubReactor*/
-    auto connfd_channel = std::make_shared<Channel>(connfd,false);
+    auto connfd_channel = new Channel(connfd);
     /*!
-        Http server的连接sokcet需要监听可读、可写、断开连接以及错误事件
-        但是需要注意的是，不要一开始就注册可写事件。因为只要connfd只要不是阻塞的它就是可写的
-        因此，需要在完整读取了客户端的数据之后再注册可写事件，否则会一直触发可写事件
+        Http server的连接sokcet需要监听可读、可写、断开连接以及错误事件。
+        但是需要注意的是，不要一开始就注册可写事件，因为只要connfd只要不是阻塞的它就是可写的。
+        因此，需要在完整读取了客户端的数据之后再注册可写事件，否则会一直触发可写事件。
+        这里connfd_channel的生命周期交由SubReactor管理。
      */
     connfd_channel->SetEvents(EPOLLIN | EPOLLRDHUP | EPOLLERR);
 
     //将连接socket分发给事件最少的SubReactor
-    auto target_subreactor = sub_reactors_[0];
+    int smallest_num = sub_reactors_[0]->GetConnectionNum();
     unsigned long index = 0;
-    std::vector<int> size_of_each;
+    std::vector<int> num_of_each;
     printf("------------------------------------------------------\n");
-    for (decltype(sub_reactors_.size()) i = 0; i < sub_reactors_.size(); ++i)
+    for (unsigned long i = 0; i < sub_reactors_.size(); ++i)
     {
         int num =  sub_reactors_[i]->GetConnectionNum();
-        size_of_each.push_back(num);
-        if( num < target_subreactor->GetConnectionNum())
+        num_of_each.push_back(num);
+        if( num < smallest_num)
         {
-            target_subreactor = sub_reactors_[i];
+            smallest_num = num;
             index = i;
         }
     }
-    connfd_channel->SetHolder(std::make_shared<HttpData>(target_subreactor,connfd_channel));
-    if(target_subreactor->AddToEventChannelPool(connfd_channel))
+    //必须先设置Holder再将该连接socket加入到事件池中
+    connfd_channel->SetHolder(new HttpData(sub_reactors_[index].get(),connfd_channel));
+    if(sub_reactors_[index]->AddToEventChannelPool(connfd_channel))
     {
         printf("new connection established through socket %d and handled by subreactor %d\n",connfd,index);
-        ++size_of_each[index];
+        ++num_of_each[index];
     }
 
     /*打印当前每个SubReactor的连接数量*/
-    for (int i = 0; i < size_of_each.size(); ++i)
+    for (int i = 0; i < num_of_each.size(); ++i)
     {
-        printf("subreactor %d is handling %d connections\n",i,size_of_each[i]);
+        printf("subreactor %d is handling %d connections\n",i,num_of_each[i]);
     }
 }
 

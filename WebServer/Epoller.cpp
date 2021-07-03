@@ -1,9 +1,14 @@
+
+
+/*User-define Headers*/
 #include "Epoller.h"
+#include "Channel.h"
+#include "HttpData.h"
 
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
-const int kEpollTimeOut = 10000;             //epoll超时时间(单位为毫秒)
+const int kEpollTimeOut = 10000;             //epoll超时时间10秒(单位为毫秒)
 const int kMaxActiveEventNum = 4096;         //最多监听4096个事件
 
 Epoller::Epoller() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
@@ -16,8 +21,18 @@ Epoller::Epoller() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
     active_events_.resize(kMaxActiveEventNum);
 }
 
-bool Epoller::AddEpollEvent(std::shared_ptr<Channel> event_channel)
+Epoller::~Epoller()
 {
+    close(epollfd_);
+}
+
+bool Epoller::AddEpollEvent(Channel* event_channel)
+{
+    /*每一个连接socket都必须设置一个表示HttpData对象的holder*/
+    if(!event_channel) return false;
+    auto holder = event_channel->GetHolder();
+    if(!event_channel->IsListenfd() && holder == nullptr) return false;
+
     int fd = event_channel->GetFd();
     epoll_event event;
     bzero(&event,sizeof event);
@@ -28,20 +43,17 @@ bool Epoller::AddEpollEvent(std::shared_ptr<Channel> event_channel)
         printf("epoll add error: %s", strerror(errno));
         return false;
     }
-    else if(current_channel_num_ >= kMaxUserNum)
-    {
-        printf("add event to full SubReactor!\n");
-        return false;
-    }
     /*向内核epoll事件表添加事件成功后才能将事件添加到事件池中*/
-    events_channel_pool_[event.data.fd] = event_channel;
-    http_data_pool_[event.data.fd] = event_channel->GetHolder();
-    ++current_channel_num_;
+    events_channel_pool_[event.data.fd] = std::unique_ptr<Channel>(event_channel);
+    http_data_pool_[event.data.fd] = std::unique_ptr<HttpData>(holder);
+
     return true;
 }
 
-bool Epoller::ModEpollEvent(std::shared_ptr<Channel> event_channel)
+bool Epoller::ModEpollEvent(Channel* event_channel)
 {
+    if(!event_channel) return false;
+
     int fd = event_channel->GetFd();
     epoll_event event;
     event.data.fd = fd;
@@ -52,13 +64,14 @@ bool Epoller::ModEpollEvent(std::shared_ptr<Channel> event_channel)
         printf("epoll mod error: %s\n", strerror(errno));
         return false;
     }
-    /*只有修改内核epoll事件表成功后才能修改事件池*/
-    //events_channel_poll_[fd] = event_channel;
+
     return true;
 }
 
-bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
+bool Epoller::DelEpollEvent(Channel* event_channel)
 {
+    if(!event_channel) return false;
+
     int fd = event_channel->GetFd();
     epoll_event event;
     event.data.fd = fd;
@@ -69,14 +82,14 @@ bool Epoller::DelEpollEvent(std::shared_ptr<Channel> event_channel)
         printf("epoll del error: %s\n", strerror(errno));
         return false;
     }
-    close(fd);
-    events_channel_pool_[fd].reset();
-    http_data_pool_[fd].reset();
-    --current_channel_num_;
+    /*释放资源以关闭连接*/
+    events_channel_pool_[fd].reset(nullptr);
+    http_data_pool_[fd].reset(nullptr);
+
     return true;
 }
 
-std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
+std::vector<Channel*> Epoller::GetActiveEvents()
 {
     while(!stop_)
     {
@@ -94,16 +107,16 @@ std::vector<std::shared_ptr<Channel>> Epoller::GetActiveEvents()
         }
 
         /*根据就绪事件，找到事件池中相应的Channel并修改其revents_属性*/
-        std::vector<std::shared_ptr<Channel>> ret(active_event_num);
+        std::vector<Channel*> ret(active_event_num);
         for (int i = 0; i < active_event_num; ++i)
         {
             int fd = active_events_[i].data.fd;
-            auto channel = events_channel_pool_[fd];
+            auto& channel = events_channel_pool_[fd];
 
             if(channel)
             {
                 channel->SetRevents(active_events_[i].events);
-                ret[i] = std::move(channel);
+                ret[i] = channel.get();
             }
             else
             {
@@ -119,6 +132,6 @@ void Epoller::ClearEpoller()
 {
     for (auto& i : events_channel_pool_)
     {
-        if(i) DelEpollEvent(i);
+        if(i) DelEpollEvent(i.get());
     }
 }

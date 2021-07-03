@@ -16,19 +16,11 @@
 
 /*！
 @Author: DJJ
-@Description: 服务器测试代码，使用非阻塞connect
+@Description: 服务器测试代码。由于实在同一台主机上测试，使用阻塞connect即可
 @Date: 2021/6/18 上午11:13
 */
 
-int SetNonBlocking(int fd)
-{
-    int old_option = fcntl(fd,F_GETFL);
-    int new_option = old_option | O_NONBLOCK;
-    fcntl(fd,F_SETFL,new_option);
-    return old_option;
-}
-
-int NonBlockConnect(const char* ip,int port,int timeout)
+int NonBlockConnect(const char* ip,int port)
 {
     /*创建服务器监听socket的地址*/
     sockaddr_in server_addr;
@@ -38,63 +30,17 @@ int NonBlockConnect(const char* ip,int port,int timeout)
     
     int sockfd = socket(PF_INET,SOCK_STREAM,0);
     assert( sockfd != -1);
-    //int old_option = SetNonBlocking(sockfd);    //设置成非阻塞才能同时发起多个连接
 
     int ret = connect(sockfd,reinterpret_cast<sockaddr*>(&server_addr),sizeof server_addr);
     if(ret == 0)
     {
         /*连接成功建立，返回*/
         printf("connection established through socket %d\n",sockfd);
-        //fcntl(sockfd,F_SETFL,old_option);
         return sockfd;
     }
 
-    printf("connection failed\n");
+    printf("connection failed: %s\n", strerror(errno));
     return -1;
-//    else if(errno != EINPROGRESS)
-//    {
-//        /*返回-1且错误代码为EINPROHRES时才表示连接正在进行当中*/
-//        printf("nonblock connection unsupport\n");
-//        return -1;
-//    }
-//
-//    /*连接正在进行中时，使用poll监听该socket，并在连接成功建立后清除错误代码*/
-//    pollfd fds[1];
-//    fds[0].events = POLLOUT;fds[0].revents = 0;
-//    int res = poll(fds,1, timeout);
-//    if(res<0)
-//    {
-//        /*出错*/
-//        printf("connection error: %s\n", strerror(errno));
-//        close(sockfd);
-//        return -1;
-//    }
-//    else if(res == 0)
-//    {
-//        /*超时*/
-//        printf("connection time out\n");
-//        close(sockfd);
-//        return -1;
-//    }
-//    /*获取socket上的错误代码，错误号为0才表示连接成功*/
-//    int error = 0;
-//    socklen_t len = sizeof error;
-//    if(getsockopt(sockfd,SOL_SOCKET,SO_ERROR,&error,&len)<0)
-//    {
-//        printf("get socket option failed\n");
-//        close(sockfd);
-//        return -1;
-//    }
-//    if(error !=0)
-//    {
-//        printf("connection failed after poll with error: %s\n", strerror(errno));
-//        close(sockfd);
-//        return -1;
-//    }
-//    /*连接成功*/
-//    printf("connection success after poll with the socket: %d\n",sockfd);
-//    fcntl(sockfd,F_SETFL,old_option);
-//    return sockfd;
 }
 int main(int argc,char* argv[])
 {
@@ -111,7 +57,7 @@ int main(int argc,char* argv[])
     {
         if(conn_num >=5) continue;
 
-        int temp = NonBlockConnect(ip,port,200000);
+        int temp = NonBlockConnect(ip,port);
         sleep(0.5);
         if(temp > 0)
         {

@@ -14,7 +14,7 @@
 
 /*！
 @Author: DJJ
-@Description: Channel类，即事件类
+@Description: Channel类，即一个底层事件类
 
  1. 注册文件描述符、其上要监听的事件以及相应的回调函数
  2. 根据就绪事件调用相应的回调函数
@@ -29,10 +29,10 @@ class HttpData;
 
 class Channel {
 private:
-    int fd_;                    //需要监听事件的文件描述符
-    bool is_listenfd_;          //表示fd_是否为监听socket
-    __uint32_t events_;         //文件描述符fd_需要监听的事件
-    __uint32_t revents_;        //events_中的就绪事件
+    int fd_;                       //需要监听事件的文件描述符
+    bool is_listenfd_;             //表示fd_是否为监听socket
+    __uint32_t events_;            //文件描述符fd_需要监听的事件
+    __uint32_t revents_;           //events_中的就绪事件
 
     using CallBack = std::function<void()>;
     CallBack ReadHandler_;         //读数据的回调函数
@@ -40,7 +40,7 @@ private:
     CallBack ErrorHandler_;        //错误处理的回调函数
     CallBack ConnHandler_;         //接受连接的回调函数
 
-    std::weak_ptr<HttpData> holder_;  //只有连接socket才需要一个holder，监听socket不需要
+    HttpData* holder_;             //只有连接socket才需要一个holder，监听socket不需要
 public:
     Channel() = default;
     explicit Channel(int fd,bool is_listenfd = false);
@@ -59,8 +59,8 @@ public:
     void SetIsListenfd(bool is_listenfd) {is_listenfd_ = is_listenfd;}
     bool IsListenfd()                    {return is_listenfd_;}
 
-    void SetHolder(std::shared_ptr<HttpData> event_channel) {holder_ = event_channel;}
-    std::shared_ptr<HttpData> GetHolder() {return holder_.lock();}
+    void SetHolder(HttpData* holder) {holder_ = holder;}
+    HttpData* GetHolder() {return holder_;}
 
     /*注册回调函数。std::function是cheap object，pass by value + move就可*/
     void SetReadHandler(CallBack read_handler)       {ReadHandler_ = std::move(read_handler);}

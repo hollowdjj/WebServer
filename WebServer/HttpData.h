@@ -4,15 +4,18 @@
 /*Linux system APIs*/
 
 /*STD Headers*/
+#include <string>
 
 /*User-define Headers*/
-#include "EventLoop.h"
+
+class EventLoop;
+class Channel;
 
 /*！
 @Author: DJJ
 @Description: HttpData类
 
- 处理http数据。包含连接socket可读、可写、异常以及断开连接的回调函数
+ 用于处理http数据。包含连接socket可读、可写、异常以及断开连接的回调函数。
 
 @Date: 2021/6/15 下午8:09
 */
@@ -20,14 +23,16 @@
 //TODO 引入HTTP
 class HttpData {
 private:
-    std::shared_ptr<Channel> connfd_channel_;   //连接socket对应的Channel对象的智能指针
-    std::weak_ptr<EventLoop> sub_reactor_;      //connfd_channel_属于的SubReactor
+    Channel* connfd_channel_;                   //连接socket对应的Channel对象的智能指针
+    EventLoop* sub_reactor_;                    //connfd_channel_属于的SubReactor
     std::string read_in_buffer;
     std::string write_out_buffer;
 public:
     HttpData() = default;
-    HttpData(std::shared_ptr<EventLoop> sub_reactor,std::shared_ptr<Channel> connfd_channel);
+    HttpData(EventLoop* sub_reactor,Channel* connfd_channel);
+    ~HttpData();
 
+    void HandleDisConn();                                           //调用断开连接函数
 private:
     void ReadHandler();                                             //从连接socket读数据
     void WriteHandler();                                            //向连接socket写数据

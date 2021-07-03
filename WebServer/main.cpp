@@ -25,11 +25,11 @@ int main()
     int port = 6688;
     /*创建一个线程池。注意主线程不在线程池中*/
     ThreadPool thread_pool(std::thread::hardware_concurrency() - 1);
-    std::shared_ptr<EventLoop> main_reactor = std::make_shared<EventLoop>();
-    server = CreateMainReactor(port,main_reactor,thread_pool);
+    EventLoop main_reactor = EventLoop();
+    server = CreateHttpServer(port, &main_reactor, &thread_pool);
 
     /*服务器开始运行*/
     server->Start();
-    main_reactor->StartLoop();
+    main_reactor.StartLoop();
     return 0;
 }

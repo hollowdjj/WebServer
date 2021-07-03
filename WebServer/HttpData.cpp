@@ -1,9 +1,10 @@
 #include "HttpData.h"
+#include "Channel.h"
+#include "EventLoop.h"
 
-using namespace std::placeholders;
 
-HttpData::HttpData(std::shared_ptr<EventLoop> sub_reactor, std::shared_ptr<Channel> connfd_channel)
-                        :sub_reactor_(std::move(sub_reactor)),connfd_channel_(std::move(connfd_channel))
+HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
+                        :sub_reactor_(sub_reactor),connfd_channel_(connfd_channel)
 {
     if(connfd_channel_)
     {
@@ -15,6 +16,10 @@ HttpData::HttpData(std::shared_ptr<EventLoop> sub_reactor, std::shared_ptr<Chann
     }
 }
 
+HttpData::~HttpData()
+{
+    //do nothing 成员变量中的raw pointers不负责管理其所指向对象的生命周期
+}
 void HttpData::ReadHandler()
 {
     /*读取数据并显示。ET模式下需一次性把数据读完*/
@@ -74,7 +79,7 @@ void HttpData::DisConndHandler()
 {
     printf("client %d disconnect\n",connfd_channel_->GetFd());
     /*客户端断开连接时，服务器端也断开连接。此时，需将连接socket从事件池中删除*/
-    sub_reactor_.lock()->DelFromEventChannePool(connfd_channel_);
+    sub_reactor_->DelFromEventChannePool(connfd_channel_);
 }
 
 void HttpData::ErrorHandler(int fd,int error_num,std::string msg)

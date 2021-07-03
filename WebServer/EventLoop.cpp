@@ -1,9 +1,11 @@
 #include "EventLoop.h"
+#include "Channel.h"
 
-EventLoop::EventLoop() : event_pool_(std::make_shared<Epoller>())
+EventLoop::EventLoop() : event_pool_(std::make_unique<Epoller>())
 {
 
 }
+
 EventLoop::~EventLoop()
 {
     stop_ = true;
@@ -11,14 +13,14 @@ EventLoop::~EventLoop()
 
 void EventLoop::StartLoop()
 {
-    std::vector<std::shared_ptr<Channel>> ret;
+    std::vector<Channel*> ret;
     while(!stop_)
     {
         ret.clear();
         /*事件池为空时休眠*/
         {
             std::unique_lock<std::mutex> locker(mutex_for_wakeup_);
-            cond_.wait(locker,[this](){return !this->event_pool_->empty();});
+            cond_.wait(locker,[this](){return connection_num_ > 0;});
         }
         /*获取事件池中的就绪事件*/
         ret = event_pool_->GetActiveEvents();
