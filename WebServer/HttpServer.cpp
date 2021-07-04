@@ -4,8 +4,8 @@
 #include "HttpData.h"
 
 HttpServer::HttpServer(int port, EventLoop* main_reactor,ThreadPool* sub_thread_pool)
-            : listenfd_(BindAndListen(port)),main_reactor_(main_reactor),sub_thread_pool_(sub_thread_pool)
-            ,listen_channel_(new Channel(listenfd_,true))
+            : listenfd_(BindAndListen(port)), p_main_reactor_(main_reactor), p_sub_thread_pool_(sub_thread_pool)
+            , p_listen_channel_(new Channel(listenfd_, true))
 {
     assert(listenfd_ != -1);
     port_ = port;
@@ -26,27 +26,27 @@ HttpServer::~HttpServer()
 void HttpServer::Start()
 {
     /*对监听socket监听可读以及异常事件*/
-    listen_channel_->SetEvents(EPOLLIN | EPOLLERR);
-    listen_channel_->SetConnHandler([this] { NewConnHandler(); });
-    listen_channel_->SetErrorHandler([this]{ ErrorHandler(); });
+    p_listen_channel_->SetEvents(EPOLLIN | EPOLLERR);
+    p_listen_channel_->SetConnHandler([this] { NewConnHandler(); });
+    p_listen_channel_->SetErrorHandler([this]{ ErrorHandler(); });
 
     /*将listen_channel加入MainReactor中进行监听*/
-    main_reactor_->AddToEventChannelPool(listen_channel_);
+    p_main_reactor_->AddToEventChannelPool(p_listen_channel_);
 
     /*构造SubReactor并开启事件循环*/
-    auto sub_reactor_num = sub_thread_pool_->size();
+    auto sub_reactor_num = p_sub_thread_pool_->size();
     for (decltype(sub_reactor_num) i = 0; i < sub_reactor_num; ++i)
     {
         /*HttpServer和ThreadPool需要共享SubReactor，故这里使用shared_ptr*/
         auto sub_reactor = std::make_shared<EventLoop>();
-        sub_thread_pool_->AddTaskToPool([=](){sub_reactor->StartLoop();});
+        p_sub_thread_pool_->AddTaskToPool([=](){sub_reactor->StartLoop();});
         sub_reactors_.emplace_back(sub_reactor);
     }
 }
 
 void HttpServer::Quit()
 {
-    main_reactor_->Quit();
+    p_main_reactor_->Quit();
     for (auto& sub_reactors : sub_reactors_)
     {
         sub_reactors->Quit();
@@ -116,5 +116,5 @@ void HttpServer::NewConnHandler()
 
 void HttpServer::ErrorHandler()
 {
-    printf("get an error form listen socket: %s", strerror(errno));
+    printf("get an error form listen socket: %s\n", strerror(errno));
 }

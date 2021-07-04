@@ -21,7 +21,6 @@ int main()
         printf("set CloseServer handler failed\n");
         return -1;
     }
-
     int port = 6688;
     /*创建一个线程池。注意主线程不在线程池中*/
     ThreadPool thread_pool(std::thread::hardware_concurrency() - 1);

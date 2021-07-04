@@ -2,30 +2,42 @@
 #include "Channel.h"
 #include "EventLoop.h"
 
-
+/*--------------------拷贝控制成员实现------------------*/
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
-                        :sub_reactor_(sub_reactor),connfd_channel_(connfd_channel)
+                        :p_sub_reactor_(sub_reactor),p_connfd_channel_(connfd_channel)
 {
-    if(connfd_channel_)
+    if(p_connfd_channel_)
     {
         /*设置回调函数*/
-        connfd_channel_->SetReadHandler([this](){ReadHandler();});
-        connfd_channel_->SetWriteHandler([this](){WriteHandler();});
-        //connfd_channel_->SetDisconnHandler([this](){DisConndHandler();});
-        //connfd_channel_->SetErrorHandler(std::bind(&HttpData::ErrorHandler,this,10,10,"1"));
+        p_connfd_channel_->SetReadHandler([this](){ReadHandler();});
+        p_connfd_channel_->SetWriteHandler([this](){WriteHandler();});
     }
 }
 
 HttpData::~HttpData()
 {
-    //do nothing 成员变量中的raw pointers不负责管理其所指向对象的生命周期
+    /*do nothing 成员变量中的raw pointers不负责管理其所指向对象的生命周期*/
 }
+
+/*---------------------接口实现-------------------------*/
+//void HttpData::LinkTimer(Timer* p_timer)
+//{
+//    if(!p_timer)
+//    {
+//        printf("can't link an empty timer\n");
+//        return;
+//    }
+//    p_timer_ = p_timer;
+//    p_timer_->SetExpiredHandler([this](){ExpiredHandler();});
+//}
+
+/*-----------------private成员函数实现-------------------*/
 void HttpData::ReadHandler()
 {
     /*读取数据并显示。ET模式下需一次性把数据读完*/
     char buffer[4096];
     memset(buffer,'\0',4096);
-    int fd = connfd_channel_->GetFd();
+    int fd = p_connfd_channel_->GetFd();
     while(true)
     {
         /*fd是非阻塞的那么recv就是非阻塞调用。*/
@@ -40,9 +52,9 @@ void HttpData::ReadHandler()
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
                 /*数据读完后，服务端准备向客户端写数据。此时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
-                __uint32_t old_option = connfd_channel_->GetEvents();
+                __uint32_t old_option = p_connfd_channel_->GetEvents();
                 __uint32_t new_option = old_option | EPOLLOUT | ~EPOLLIN;
-                connfd_channel_->SetEvents(new_option);
+                p_connfd_channel_->SetEvents(new_option);
                 printf("get content: %s from socket %d\n",buffer,fd);
                 break;
             }
@@ -70,16 +82,16 @@ void HttpData::WriteHandler()
 {
     printf("write data\n");
     /*写完数据之后，需要删除注册的EPOLLOUT事件，并重新注册EPOLLIN事件*/
-    __uint32_t old_option = connfd_channel_->GetEvents();
+    __uint32_t old_option = p_connfd_channel_->GetEvents();
     __uint32_t new_option = old_option | EPOLLIN | ~EPOLLOUT;
-    connfd_channel_->SetEvents(new_option);
+    p_connfd_channel_->SetEvents(new_option);
 }
 
 void HttpData::DisConndHandler()
 {
-    printf("client %d disconnect\n",connfd_channel_->GetFd());
+    printf("client %d disconnect\n",p_connfd_channel_->GetFd());
     /*客户端断开连接时，服务器端也断开连接。此时，需将连接socket从事件池中删除*/
-    sub_reactor_->DelFromEventChannePool(connfd_channel_);
+    p_sub_reactor_->DelFromEventChannePool(p_connfd_channel_);
 }
 
 void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
@@ -93,4 +105,10 @@ void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
 
     /*向客户端发送错误信息*/
     send(fd,error,length,0);
+}
+
+void HttpData::ExpiredHandler()
+{
+    printf("client %d is silent for a while, preparing to shut it down\n",p_connfd_channel_->GetFd());
+    DisConndHandler();
 }

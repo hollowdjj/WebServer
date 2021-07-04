@@ -40,7 +40,7 @@ private:
     CallBack ErrorHandler_;        //错误处理的回调函数
     CallBack ConnHandler_;         //接受连接的回调函数
 
-    HttpData* holder_;             //只有连接socket才需要一个holder，监听socket不需要
+    HttpData* p_holder_;           //只有连接socket才需要一个holder，监听socket不需要
 public:
     Channel() = default;
     explicit Channel(int fd,bool is_listenfd = false);
@@ -59,8 +59,8 @@ public:
     void SetIsListenfd(bool is_listenfd) {is_listenfd_ = is_listenfd;}
     bool IsListenfd()                    {return is_listenfd_;}
 
-    void SetHolder(HttpData* holder) {holder_ = holder;}
-    HttpData* GetHolder() {return holder_;}
+    void SetHolder(HttpData* holder) {p_holder_ = holder;}
+    HttpData* GetHolder() {return p_holder_;}
 
     /*注册回调函数。std::function是cheap object，pass by value + move就可*/
     void SetReadHandler(CallBack read_handler)       {ReadHandler_ = std::move(read_handler);}

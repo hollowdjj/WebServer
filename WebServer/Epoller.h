@@ -10,7 +10,8 @@
 #include <array>
 
 /*User-define Headers*/
-#include <Utility.h>
+#include "Utility.h"
+#include "Timer.h"
 
 class Channel;
 class HttpData;
@@ -32,6 +33,7 @@ private:
     std::unique_ptr<Channel> events_channel_pool_[kMaxUserNum];   //事件池
     std::unique_ptr<HttpData> http_data_pool_[kMaxUserNum];       //每一个连接socket的Channel都会对应一个HttpData对象
     bool stop_ = false;                                           //停止监听的标志
+    TimeWheel timer_manager_;                                  //每个事件池都有一个TimerManager对象
 public:
     Epoller();
     ~Epoller();
@@ -39,6 +41,7 @@ public:
     bool AddEpollEvent(Channel* event_channel);                    //向事件池以及内核事件表中添加新的事件
     bool ModEpollEvent(Channel* event_channel);                    //修改内核事件表中注册的文件描述符想要监听的事件
     bool DelEpollEvent(Channel* event_channel);                    //删除内核事件表中注册的文件描述符
+    void HandleExpired();                                          //处理超时连接
 
     std::vector<Channel*> GetActiveEvents();                       //返回就绪事件
     int GetEpollfd(){return epollfd_;}                             //返回epoll内核事件表

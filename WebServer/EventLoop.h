@@ -19,14 +19,14 @@
 
 class EventLoop {
 private:
-    std::mutex mutex_for_wakeup_;              //互斥锁
-    std::condition_variable cond_;             //条件变量
+    std::mutex mutex_for_wakeup_;                 //互斥锁
+    std::condition_variable cond_;                //条件变量
 
-    bool stop_ = false;                        //指示Sub/Main-Reactor是否工作，默认为正在工作
-    std::unique_ptr<Epoller> event_pool_;      //每个EventLoop都唯一拥有一个事件池
+    bool stop_ = false;                           //指示Sub/Main-Reactor是否工作，默认为正在工作
+    std::unique_ptr<Epoller> p_event_pool_;       //每个EventLoop都唯一拥有一个事件池
 
     std::mutex mutex_for_conn_num_;
-    int connection_num_;                       //Sub/Main-Reactor管理的连接数量
+    int connection_num_;                          //Sub/Main-Reactor管理的连接数量
 public:
     EventLoop();
     ~EventLoop();
@@ -45,8 +45,8 @@ public:
     void Quit()
     {
         /*事件池停止监听工作并清空事件池*/
-        event_pool_->Stop();
-        event_pool_->ClearEpoller();
+        p_event_pool_->Stop();
+        p_event_pool_->ClearEpoller();
         /*停止标志设置为true并唤醒休眠中的线程以退出while循环*/
         stop_ = true;
         cond_.notify_all();
@@ -56,7 +56,7 @@ public:
     bool AddToEventChannelPool(Channel* event_channel)
     {
         /*添加了事件成功后就需唤醒此SubReactor*/
-        if(event_pool_->AddEpollEvent(event_channel))
+        if(p_event_pool_->AddEpollEvent(event_channel))
         {
             {
                 std::unique_lock<std::mutex> locker(mutex_for_conn_num_);
@@ -69,11 +69,11 @@ public:
     }
     bool ModEventChannelPool(Channel* event_channel)
     {
-         return event_pool_->ModEpollEvent(event_channel);
+         return p_event_pool_->ModEpollEvent(event_channel);
     }
     bool DelFromEventChannePool(Channel* event_channel)
     {
-        if(event_pool_->DelEpollEvent(event_channel))
+        if(p_event_pool_->DelEpollEvent(event_channel))
         {
             std::unique_lock<std::mutex> locker(mutex_for_conn_num_);
             --connection_num_;

@@ -8,8 +8,10 @@
 
 /*User-define Headers*/
 
+/*前向声明*/
 class EventLoop;
 class Channel;
+class Timer;
 
 /*！
 @Author: DJJ
@@ -23,8 +25,9 @@ class Channel;
 //TODO 引入HTTP
 class HttpData {
 private:
-    Channel* connfd_channel_;                   //连接socket对应的Channel对象的智能指针
-    EventLoop* sub_reactor_;                    //connfd_channel_属于的SubReactor
+    Channel* p_connfd_channel_;                   //连接socket对应的Channel对象的智能指针
+    EventLoop* p_sub_reactor_;                    //connfd_channel_属于的SubReactor
+    //Timer* p_timer_;                              //挂靠的定时器
     std::string read_in_buffer;
     std::string write_out_buffer;
 public:
@@ -32,12 +35,13 @@ public:
     HttpData(EventLoop* sub_reactor,Channel* connfd_channel);
     ~HttpData();
 
-    void HandleDisConn();                                           //调用断开连接函数
+    //void LinkTimer(Timer* p_timer);              //挂靠定时器
 private:
     void ReadHandler();                                             //从连接socket读数据
     void WriteHandler();                                            //向连接socket写数据
     void DisConndHandler();                                         //连接socket断开连接
     void ErrorHandler(int fd,int error_num,std::string msg);        //错误处理
+    void ExpiredHandler();                                          //连接socket的超时处理
 };
 
 

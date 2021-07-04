@@ -1,5 +1,3 @@
-
-
 /*User-define Headers*/
 #include "Epoller.h"
 #include "Channel.h"
@@ -89,6 +87,11 @@ bool Epoller::DelEpollEvent(Channel* event_channel)
     return true;
 }
 
+void Epoller::HandleExpired()
+{
+    timer_manager_.HandleExpired();
+}
+
 std::vector<Channel*> Epoller::GetActiveEvents()
 {
     while(!stop_)
@@ -101,8 +104,7 @@ std::vector<Channel*> Epoller::GetActiveEvents()
         }
         else if(active_event_num == 0)
         {
-            /*epoll_wait超时，这里暂时的处理方式是继续循环*/
-            //printf("waiting for active events\n");
+            /*epoll_wait超时，这里的处理方式是继续循环*/
             continue;
         }
 
