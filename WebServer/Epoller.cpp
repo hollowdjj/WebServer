@@ -41,10 +41,11 @@ bool Epoller::AddEpollEvent(Channel* event_channel)
         printf("epoll add error: %s", strerror(errno));
         return false;
     }
-    /*向内核epoll事件表添加事件成功后才能将事件添加到事件池中*/
+    /*向内核epoll事件表添加事件成功后才能将事件添加到事件池中并设置定时器*/
     events_channel_pool_[event.data.fd] = std::unique_ptr<Channel>(event_channel);
     http_data_pool_[event.data.fd] = std::unique_ptr<HttpData>(holder);
-
+    auto p_timer = timewheel_.AddTimer(std::chrono::seconds(5));
+    event_channel->GetHolder()->LinkTimer(p_timer);
     return true;
 }
 
@@ -62,7 +63,6 @@ bool Epoller::ModEpollEvent(Channel* event_channel)
         printf("epoll mod error: %s\n", strerror(errno));
         return false;
     }
-
     return true;
 }
 
@@ -85,11 +85,6 @@ bool Epoller::DelEpollEvent(Channel* event_channel)
     http_data_pool_[fd].reset(nullptr);
 
     return true;
-}
-
-void Epoller::HandleExpired()
-{
-    timer_manager_.HandleExpired();
 }
 
 std::vector<Channel*> Epoller::GetActiveEvents()

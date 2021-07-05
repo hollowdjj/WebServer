@@ -20,16 +20,16 @@ HttpData::~HttpData()
 }
 
 /*---------------------接口实现-------------------------*/
-//void HttpData::LinkTimer(Timer* p_timer)
-//{
-//    if(!p_timer)
-//    {
-//        printf("can't link an empty timer\n");
-//        return;
-//    }
-//    p_timer_ = p_timer;
-//    p_timer_->SetExpiredHandler([this](){ExpiredHandler();});
-//}
+void HttpData::LinkTimer(Timer* p_timer)
+{
+    if(!p_timer)
+    {
+        printf("can't link an empty timer\n");
+        return;
+    }
+    p_timer_ = p_timer;
+    p_timer_->SetExpiredHandler([this](){ExpiredHandler();});
+}
 
 /*-----------------private成员函数实现-------------------*/
 void HttpData::ReadHandler()

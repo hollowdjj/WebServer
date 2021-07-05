@@ -27,7 +27,7 @@ class HttpData {
 private:
     Channel* p_connfd_channel_;                   //连接socket对应的Channel对象的智能指针
     EventLoop* p_sub_reactor_;                    //connfd_channel_属于的SubReactor
-    //Timer* p_timer_;                              //挂靠的定时器
+    Timer* p_timer_;                              //挂靠的定时器
     std::string read_in_buffer;
     std::string write_out_buffer;
 public:
@@ -35,7 +35,7 @@ public:
     HttpData(EventLoop* sub_reactor,Channel* connfd_channel);
     ~HttpData();
 
-    //void LinkTimer(Timer* p_timer);              //挂靠定时器
+    void LinkTimer(Timer* p_timer);              //挂靠定时器
 private:
     void ReadHandler();                                             //从连接socket读数据
     void WriteHandler();                                            //向连接socket写数据

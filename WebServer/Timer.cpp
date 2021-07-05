@@ -1,26 +1,31 @@
-#include <curses.h>
 #include "Timer.h"
 #include "HttpData.h"
 
-/*Timer类*/
-Timer::Timer(size_t cycles, size_t slot_index)
-            : cycles_(cycles),
+/*---------------------------------Timer类--------------------------------------*/
+Timer::Timer(size_t trigger_cycles, size_t slot_index)
+            : trigger_cycles_(trigger_cycles),
               slot_index_(slot_index) {}
 
 
-/*TimerManager类*/
-
-void TimeWheel::HandleExpired()
+/*------------------------------TimerManager类----------------------------------*/
+TimeWheel::~TimeWheel()
 {
-    /*找到timer_set_中第一个超时时刻在当前时刻之后的Timer*/
+    /*delete所有timer*/
+    for (auto& slot : slots)
+    {
+        for (auto& timer : slot)
+        {
+            delete timer;
+        }
+    }
 }
 
-void TimeWheel::AddTimer(std::chrono::seconds timeout)
+Timer* TimeWheel::AddTimer(std::chrono::seconds timeout)
 {
     if(timeout<std::chrono::seconds(0))
     {
         printf("timeout can't be less than 0\n");
-        return;
+        return nullptr;
     }
     /*!
         根据超时值计算该计时器将在时间轮转动多少次（即多少个tick）之后被触发。如果timeout小于slot_interval_，tick折合为１
@@ -32,12 +37,33 @@ void TimeWheel::AddTimer(std::chrono::seconds timeout)
      size_t cycle = ticks / slot_num_;                                  //timer将在时间轮转动cycle圈后被触发
      size_t index = (current_slot_ + (ticks % slot_num_)) % slot_num_;  //timer被放置的槽的序号
     /*创建一个Timer并加入到时间轮的对应槽之中*/
-    Timer timer = Timer(cycle,index);
-    //slots[index].emplace_back(std::move(timer));
+     Timer* p_timer = new Timer(cycle,index);
+     slots[index].push_back(p_timer);
+
+     return p_timer;
 }
 
-//void TimeWheel::DelTimer(Timer* timer)
-//{
-//    size_t index = timer.GetSlotIndex();
-//    slots[index].remove(timer);
-//}
+void TimeWheel::DelTimer(Timer* timer)
+{
+    size_t index = timer->GetSlotIndex();
+    slots[index].remove(timer);
+}
+
+void TimeWheel::Tick()
+{
+    for (auto& timer : slots[current_slot_])
+    {
+        /*trigger_cycles_大于0说明还未到触发时间*/
+        if(timer->GetTriggerCycles() > 0)
+        {
+            timer->ReduceTriggerCyclesByOne();      //减一，表示经过了这个槽。
+        }
+        /*定时器到期，调用回调函数并删除定时器*/
+        else
+        {
+            timer->CallExpiredHandler();
+            slots[current_slot_].remove(timer);
+        }
+        current_slot_ = ++current_slot_ % slot_num_;
+    }
+}

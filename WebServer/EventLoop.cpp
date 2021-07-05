@@ -27,7 +27,6 @@ void EventLoop::StartLoop()
         ret = p_event_pool_->GetActiveEvents();
         /*调用活跃事件的回调函数*/
         for (auto& item : ret) item->CallReventsHandlers();
-        p_event_pool_->HandleExpired();
     }
     stop_ = true;
 }
