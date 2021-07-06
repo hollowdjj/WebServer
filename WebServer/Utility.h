@@ -20,6 +20,7 @@
 #include <condition_variable>
 #include <future>
 #include <iostream>
+#include <chrono>
 
 /*！
 @Author: DJJ
@@ -30,7 +31,12 @@
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
-const int kMaxUserNum = 100000;                  //最大并发连接数量
+struct GlobalVar{
+    static const int kMaxUserNum = 100000;                              //最大并发连接数量
+    static std::chrono::seconds slot_interval;                          //时间轮的槽间隔
+    static std::chrono::seconds timer_timeout ;                         //timer的超时时间
+    static int slot_num;                                                //时间轮的槽数
+};
 
 /*将文件描述符fd设置为非阻塞模式*/
 int SetNonBlocking(int fd);

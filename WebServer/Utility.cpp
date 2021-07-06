@@ -1,5 +1,10 @@
 #include "Utility.h"
 
+/*设定一个默认值*/
+std::chrono::seconds GlobalVar::slot_interval = std::chrono::seconds(1); /* NOLINT */
+std::chrono::seconds GlobalVar::timer_timeout = std::chrono::seconds(5); /* NOLINT */
+int GlobalVar::slot_num = 60;
+
 int SetNonBlocking(int fd)
 {
     int old_option = fcntl(fd,F_GETFL);

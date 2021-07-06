@@ -18,10 +18,7 @@ EventLoop::EventLoop() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
     assert(epollfd_ != -1);
     active_events_.resize(kMaxActiveEventNum);
     /*监听管道的读端*/
-    auto tick_fd = *CreatePipe();
-    auto p_channel = new Channel(tick_fd[0], false, false);
-    p_channel->SetReadHandler([this](){timewheel_.TickAndAlarm();});
-    assert(AddEpollEvent(p_channel));
+    assert(AddEpollEvent(timewheel_.GetTickfdChannel()));
 }
 
 EventLoop::~EventLoop()
@@ -34,6 +31,7 @@ bool EventLoop::AddEpollEvent(Channel* event_channel)
     /*每一个连接socket都必须设置一个表示HttpData对象的holder*/
     if(!event_channel || (event_channel->IsConnfd() && event_channel->GetHolder()== nullptr)) return false;
 
+    /*向epoll内核事件表添加事件*/
     int fd = event_channel->GetFd();
     epoll_event event;
     bzero(&event,sizeof event);
@@ -44,21 +42,24 @@ bool EventLoop::AddEpollEvent(Channel* event_channel)
         printf("epoll add error: %s", strerror(errno));
         return false;
     }
-    /*向内核epoll事件表添加事件成功后才能将事件添加到事件池中并设置定时器*/
+    
+    /*添加事件成功后才能将事件添加到事件池中。只有连接socket才需设置holder和timer*/
     events_channel_pool_[event.data.fd] = std::unique_ptr<Channel>(event_channel);
-    http_data_pool_[event.data.fd] = std::unique_ptr<HttpData>(event_channel->GetHolder());
     if(event_channel->GetHolder())
     {
-        /*有holder的连接socket才需设置timer*/
-        auto p_timer = timewheel_.AddTimer(std::chrono::seconds(5)); //延时设置为5s
-        event_channel->GetHolder()->LinkTimer(p_timer);                         
-    }
-
-    {
-        std::unique_lock<std::mutex> locker(mutex_for_conn_num_);
-        ++connection_num_;
+        /*有holder的连接socket才需要将holder保存在事件池中并设置timer。监听socket以及tickfd均不用设置*/
+        http_data_pool_[event.data.fd] = std::unique_ptr<HttpData>(event_channel->GetHolder());
+        auto p_timer = timewheel_.AddTimer(GlobalVar::timer_timeout); //延时设置为5s
+        event_channel->GetHolder()->LinkTimer(p_timer);
+        /*连接数加1*/
+        {
+            std::unique_lock<std::mutex> locker(mutex_for_conn_num_);
+            ++connection_num_;
+        }
     }
     cond_.notify_one();
+    ++channle_num_;
+
     return true;
 }
 
@@ -84,39 +85,42 @@ bool EventLoop::DelEpollEvent(Channel* event_channel)
 {
     if(!event_channel) return false;
 
+    /*从epoll内核事件表中删除事件*/
     int fd = event_channel->GetFd();
     epoll_event event;
     event.data.fd = fd;
     event.events = 0;
-
     if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,&event)<0)
     {
         printf("epoll del error: %s\n", strerror(errno));
         return false;
     }
-    /*删除定时器(仅连接socket)并释放资源以关闭连接*/
-    if(event_channel->GetHolder())
-        timewheel_.DelTimer(event_channel->GetHolder()->GetTimer());
+
+    /*仅连接socket需要删除定时器以及holder*/
     events_channel_pool_[fd].reset(nullptr);
-    http_data_pool_[fd].reset(nullptr);
+    if(event_channel->GetHolder())
     {
-        std::unique_lock<std::mutex> locker(mutex_for_conn_num_);
-        --connection_num_;
+        timewheel_.DelTimer(event_channel->GetHolder()->GetTimer());
+        http_data_pool_[fd].reset(nullptr);
+        /*连接数减一*/
+        {
+            std::unique_lock<std::mutex> locker(mutex_for_conn_num_);
+            --connection_num_;
+        }
     }
+    --channle_num_;
 
     return true;
 }
 
 void EventLoop::StartLoop()
 {
-    /*定时*/
-    //alarm(std::chrono::duration_cast<std::chrono::seconds>(timewheel_.GetSlotInterval()).count());
     while(!stop_)
     {
         /*事件池为空时休眠*/
         {
             std::unique_lock<std::mutex> locker(mutex_for_wakeup_);
-            cond_.wait(locker,[this](){return connection_num_ > 0;});
+            cond_.wait(locker,[this](){return channle_num_ > 0;});
         }
         /*获取事件池中的就绪事件并调用相应的回调函数*/
         GetActiveEventsAndProc();
@@ -156,7 +160,7 @@ void EventLoop::GetActiveEventsAndProc()
             continue;
         }
 
-        /*根据就绪事件，找到事件池中相应的Channel修改其revents_属性并调用回调函数*/
+        /*根据就绪事件，找到事件池中相应的Channel修改其revents_属性后再调用相应的回调函数*/
         for (int i = 0; i < active_event_num; ++i)
         {
             int fd = active_events_[i].data.fd;

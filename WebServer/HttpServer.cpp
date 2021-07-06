@@ -1,5 +1,4 @@
 #include "Channel.h"
-#include "Utility.h"
 #include "HttpServer.h"
 #include "HttpData.h"
 
@@ -19,7 +18,7 @@ HttpServer::~HttpServer()
         listen_channel_的生命周期交由main_reactor_管理
         main_reactor_的生命周期由main函数管理
         sub_thread_pool_的生命周期同样由main函数管理
-        HttpServer只管理SubReactor的生命周期，这里使用了unique_ptr来自动释放资源
+        HttpServer只管理SubReactor的生命周期，这里使用了shared_ptr来自动释放资源
      */
 }
 
@@ -37,8 +36,9 @@ void HttpServer::Start()
     auto sub_reactor_num = p_sub_thread_pool_->size();
     for (decltype(sub_reactor_num) i = 0; i < sub_reactor_num; ++i)
     {
-        /*HttpServer和ThreadPool需要共享SubReactor，故这里使用shared_ptr*/
+        /*HttpServer和ThreadPool需要共享SubReactor对象，故这里使用shared_ptr*/
         auto sub_reactor = std::make_shared<EventLoop>();
+        tickfds_.emplace_back(sub_reactor->GetTickfd());     //获取SubReactor的tickfd的写端文件描述符
         p_sub_thread_pool_->AddTaskToPool([=](){sub_reactor->StartLoop();});
         sub_reactors_.emplace_back(sub_reactor);
     }
@@ -65,7 +65,7 @@ void HttpServer::NewConnHandler()
         return;
     }
     //限制服务器的最大并发连接数
-    if(current_user_num >= kMaxUserNum)
+    if(current_user_num >= GlobalVar::kMaxUserNum)
     {
         printf("max user number limit\n");
         close(connfd);

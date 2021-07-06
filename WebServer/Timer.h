@@ -28,6 +28,7 @@
 
 /*前向声明*/
 class HttpData;
+class Channel;
 
 class Timer {
 private:
@@ -49,17 +50,17 @@ public:
     }
 };
 
-/*！#include <curses.h>
+/*
 @Author: DJJ
 @Description: 采用时间轮管理所有的timer
 @Date: 2021/7/3 下午3:05
 */
 class TimeWheel{
 private:
-    static const size_t slot_num_ = 60;                                     //时间轮的槽数
-    std::chrono::seconds slot_interval_ = std::chrono::seconds(1);     //时间轮的槽间隔(1s)
-    std::array<std::list<Timer*>,slot_num_> slots;                          //时间轮的槽(使用裸指针管理Timer的生命周期)
+    std::vector<std::list<Timer*>> slots_;                                   //时间轮的槽(使用裸指针管理Timer的生命周期)
     size_t current_slot_ = 0;                                               //时间轮的当前槽
+
+    Channel* p_tickfd_channel;                                              //tick_fd_[0]对应的Channel
 public:
     /*-------------------------拷贝控制成员--------------------------*/
     TimeWheel();
@@ -69,15 +70,12 @@ public:
     /*----------------------------接口------------------------------*/
     Timer* AddTimer(std::chrono::seconds timeout);                          //添加新的定时器
     void DelTimer(Timer* timer);                                            //删除目标定时器
-    void TickAndAlarm();                                                    //tick一下后重新触发alarm函数
-    std::chrono::seconds GetSlotInterval(){return slot_interval_;}
-    int tick_fd_[2];
+    Channel* GetTickfdChannel() {return p_tickfd_channel;}
+public:
+    int tick_fd_[2]{};                                                      //用于通知时间轮tick一下的管道
 private:
     void Tick();                                                            //slot_interval_时间到后，时间轮转动一次
 };
-
-void SigHandler(int sig);                                                   //SIGALRM信号的响应函数，向tick_fd[1]写数据
-[[nodiscard]]auto CreatePipe() -> int(*)[2];                                //创建一个用于使时间轮tick一下的管道
 
 
 #endif //WEBSERVER_TIMER_H
