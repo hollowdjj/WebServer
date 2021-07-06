@@ -12,7 +12,12 @@ void CloseServer(int sig)
     delete server;
     exit(0);
 }
+void AlarmTick(int sig)
+{
 
+}
+
+//TODO 获取子线程的管道，然后定时向这些管道写数据。内核会将信号交由进程号最小的那个线程进行处理
 int main()
 {
     /*设置服务器关闭的回调函数*/

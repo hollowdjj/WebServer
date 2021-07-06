@@ -1,5 +1,6 @@
 #include "Timer.h"
 #include "HttpData.h"
+#include "Utility.h"
 
 /*---------------------------------Timer类--------------------------------------*/
 Timer::Timer(size_t trigger_cycles, size_t slot_index)
@@ -8,6 +9,15 @@ Timer::Timer(size_t trigger_cycles, size_t slot_index)
 
 
 /*------------------------------TimerManager类----------------------------------*/
+TimeWheel::TimeWheel()
+{
+    /*创建一个管道，通过监听tick_fd_[0]可读事件的形式定时让时间轮tick一下*/
+    int res = pipe(tick_fd_);
+    assert(res != -1);
+    SetNonBlocking(tick_fd_[0]);
+    SetNonBlocking(tick_fd_[1]);
+}
+
 TimeWheel::~TimeWheel()
 {
     /*delete所有timer*/
@@ -18,6 +28,9 @@ TimeWheel::~TimeWheel()
             delete timer;
         }
     }
+    /*关闭管道*/
+    close(tick_fd_[0]);
+    close(tick_fd_[1]);
 }
 
 Timer* TimeWheel::AddTimer(std::chrono::seconds timeout)
@@ -49,6 +62,12 @@ void TimeWheel::DelTimer(Timer* timer)
     slots[index].remove(timer);
 }
 
+void TimeWheel::TickAndAlarm()
+{
+    Tick();
+    alarm(std::chrono::duration_cast<std::chrono::seconds>(slot_interval_).count());
+}
+
 void TimeWheel::Tick()
 {
     for (auto& timer : slots[current_slot_])
@@ -67,3 +86,19 @@ void TimeWheel::Tick()
         current_slot_ = ++current_slot_ % slot_num_;
     }
 }
+
+void SigHandler(int sig)
+{
+    /*向tick_fd[1]写一个字节的数据*/
+    int msg = sig;
+    auto tick_fd = *CreatePipe();
+    send(tick_fd[1],reinterpret_cast<char*>(&msg),1,0);
+}
+
+//auto CreatePipe() -> int(*)[2]
+//{
+//    /*每个线程只会有一个tick_fd*/
+//    static thread_local int tick_fd[2];
+//    return &tick_fd;
+//}
+

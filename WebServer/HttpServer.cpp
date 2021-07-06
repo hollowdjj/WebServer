@@ -5,7 +5,7 @@
 
 HttpServer::HttpServer(int port, EventLoop* main_reactor,ThreadPool* sub_thread_pool)
             : listenfd_(BindAndListen(port)), p_main_reactor_(main_reactor), p_sub_thread_pool_(sub_thread_pool)
-            , p_listen_channel_(new Channel(listenfd_, true))
+            , p_listen_channel_(new Channel(listenfd_, true, false))
 {
     assert(listenfd_ != -1);
     port_ = port;
@@ -31,7 +31,7 @@ void HttpServer::Start()
     p_listen_channel_->SetErrorHandler([this]{ ErrorHandler(); });
 
     /*将listen_channel加入MainReactor中进行监听*/
-    p_main_reactor_->AddToEventChannelPool(p_listen_channel_);
+    p_main_reactor_->AddEpollEvent(p_listen_channel_);
 
     /*构造SubReactor并开启事件循环*/
     auto sub_reactor_num = p_sub_thread_pool_->size();
@@ -46,10 +46,10 @@ void HttpServer::Start()
 
 void HttpServer::Quit()
 {
-    p_main_reactor_->Quit();
+    p_main_reactor_->QuitLoop();
     for (auto& sub_reactors : sub_reactors_)
     {
-        sub_reactors->Quit();
+        sub_reactors->QuitLoop();
     }
 }
 
@@ -75,7 +75,7 @@ void HttpServer::NewConnHandler()
     SetNonBlocking(connfd);
     
     /*将连接socket分发给SubReactor*/
-    auto connfd_channel = new Channel(connfd);
+    auto connfd_channel = new Channel(connfd, false,true);
     /*!
         Http server的连接sokcet需要监听可读、可写、断开连接以及错误事件。
         但是需要注意的是，不要一开始就注册可写事件，因为只要connfd只要不是阻塞的它就是可写的。
@@ -101,7 +101,7 @@ void HttpServer::NewConnHandler()
     }
     //必须先设置Holder再将该连接socket加入到事件池中
     connfd_channel->SetHolder(new HttpData(sub_reactors_[index].get(),connfd_channel));
-    if(sub_reactors_[index]->AddToEventChannelPool(connfd_channel))
+    if(sub_reactors_[index]->AddEpollEvent(connfd_channel))
     {
         printf("new connection established through socket %d and handled by subreactor %d\n",connfd,index);
         ++num_of_each[index];

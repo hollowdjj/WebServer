@@ -36,6 +36,7 @@ public:
     ~HttpData();
 
     void LinkTimer(Timer* p_timer);              //挂靠定时器
+    Timer* GetTimer() {return p_timer_;}         //获取挂靠的定时器
 private:
     void ReadHandler();                                             //从连接socket读数据
     void WriteHandler();                                            //向连接socket写数据

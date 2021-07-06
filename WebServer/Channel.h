@@ -4,6 +4,7 @@
 /*Linux system APIS*/
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <assert.h>
 
 /*STD Headers*/
 #include <functional>
@@ -31,8 +32,9 @@ class Channel {
 private:
     int fd_;                       //需要监听事件的文件描述符
     bool is_listenfd_;             //表示fd_是否为监听socket
-    __uint32_t events_;            //文件描述符fd_需要监听的事件
-    __uint32_t revents_;           //events_中的就绪事件
+    bool is_connfd_;               //表示fd_是否为连接socket
+    __uint32_t events_{};          //文件描述符fd_需要监听的事件
+    __uint32_t revents_{};         //events_中的就绪事件
 
     using CallBack = std::function<void()>;
     CallBack ReadHandler_;         //读数据的回调函数
@@ -40,10 +42,9 @@ private:
     CallBack ErrorHandler_;        //错误处理的回调函数
     CallBack ConnHandler_;         //接受连接的回调函数
 
-    HttpData* p_holder_;           //只有连接socket才需要一个holder，监听socket不需要
+    HttpData* p_holder_{};           //只有连接socket才需要一个holder，监听socket不需要
 public:
-    Channel() = default;
-    explicit Channel(int fd,bool is_listenfd = false);
+    Channel(int fd, bool is_listenfd, bool is_connfd);
     ~Channel();
 
     /*getters and setters*/
@@ -58,6 +59,9 @@ public:
 
     void SetIsListenfd(bool is_listenfd) {is_listenfd_ = is_listenfd;}
     bool IsListenfd()                    {return is_listenfd_;}
+
+    void SetIsConnfd(bool is_connfd)     {is_connfd_ = is_connfd;}
+    bool IsConnfd()                      {return is_connfd_;}
 
     void SetHolder(HttpData* holder) {p_holder_ = holder;}
     HttpData* GetHolder() {return p_holder_;}

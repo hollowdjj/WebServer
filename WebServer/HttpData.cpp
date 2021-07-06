@@ -4,7 +4,7 @@
 
 /*--------------------拷贝控制成员实现------------------*/
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
-                        :p_sub_reactor_(sub_reactor),p_connfd_channel_(connfd_channel)
+                        :p_sub_reactor_(sub_reactor),p_connfd_channel_(connfd_channel),p_timer_(nullptr)
 {
     if(p_connfd_channel_)
     {
@@ -91,7 +91,7 @@ void HttpData::DisConndHandler()
 {
     printf("client %d disconnect\n",p_connfd_channel_->GetFd());
     /*客户端断开连接时，服务器端也断开连接。此时，需将连接socket从事件池中删除*/
-    p_sub_reactor_->DelFromEventChannePool(p_connfd_channel_);
+    p_sub_reactor_->DelEpollEvent(p_connfd_channel_);
 }
 
 void HttpData::ErrorHandler(int fd,int error_num,std::string msg)

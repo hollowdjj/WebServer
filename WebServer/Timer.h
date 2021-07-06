@@ -2,6 +2,8 @@
 #define WEBSERVER_TIMER_H
 
 /*Linux system APIs*/
+#include <unistd.h>
+#include <signal.h>
 
 /*STD Headers*/
 #include <memory>
@@ -60,13 +62,22 @@ private:
     size_t current_slot_ = 0;                                               //时间轮的当前槽
 public:
     /*-------------------------拷贝控制成员--------------------------*/
-    TimeWheel() = default;
+    TimeWheel();
     ~TimeWheel();
     TimeWheel(const TimeWheel& rhs) = delete;
     TimeWheel& operator=(const TimeWheel& rhs) = delete;
     /*----------------------------接口------------------------------*/
     Timer* AddTimer(std::chrono::seconds timeout);                          //添加新的定时器
-    [[maybe_unused]]void DelTimer(Timer* timer);                            //删除目标定时器
+    void DelTimer(Timer* timer);                                            //删除目标定时器
+    void TickAndAlarm();                                                    //tick一下后重新触发alarm函数
+    std::chrono::seconds GetSlotInterval(){return slot_interval_;}
+    int tick_fd_[2];
+private:
     void Tick();                                                            //slot_interval_时间到后，时间轮转动一次
 };
+
+void SigHandler(int sig);                                                   //SIGALRM信号的响应函数，向tick_fd[1]写数据
+[[nodiscard]]auto CreatePipe() -> int(*)[2];                                //创建一个用于使时间轮tick一下的管道
+
+
 #endif //WEBSERVER_TIMER_H
