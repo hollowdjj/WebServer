@@ -34,6 +34,8 @@ void HttpData::LinkTimer(Timer* p_timer)
 /*-----------------private成员函数实现-------------------*/
 void HttpData::ReadHandler()
 {
+    /*调整定时器以延迟该连接被关闭的时间*/
+    
     /*读取数据并显示。ET模式下需一次性把数据读完*/
     char buffer[4096];
     memset(buffer,'\0',4096);
@@ -58,8 +60,9 @@ void HttpData::ReadHandler()
                 printf("get content: %s from socket %d\n",buffer,fd);
                 break;
             }
-            /*否则，发生错误，此时关闭连接*/
+            /*否则，发生错误，此时关闭连接并删除定时器*/
             DisConndHandler();
+
             break;
         }
         else if(ret ==0)
@@ -73,9 +76,11 @@ void HttpData::ReadHandler()
         }
         else
         {
-            //std::cout<<"get "<<ret<<" bytes from " <<fd<<" which is: "<<buffer<<std::endl;
+
         }
     }
+    /*更新timer*/
+
 }
 
 void HttpData::WriteHandler()

@@ -1,7 +1,7 @@
 #include "HttpServer.h"
-#include <signal.h>
 #include <chrono>
 #include "Utility.h"
+#include <pthread.h>
 
 ///////////////////////////
 //   Global    Variables //
@@ -21,7 +21,7 @@ void AlarmTick(int sig)
     int msg = sig;
     for (auto& tick_fd : server->tickfds_)
     {
-        send(tick_fd,reinterpret_cast<char*>(&msg),1,0);
+        write(tick_fd,reinterpret_cast<char*>(&msg),1);
     }
     alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval).count());
 }
@@ -42,12 +42,11 @@ int main()
     int port = 6688;
     /*创建一个线程池。注意主线程不在线程池中*/
     ThreadPool thread_pool(std::thread::hardware_concurrency() - 1);
-    EventLoop main_reactor = EventLoop();
+    EventLoop main_reactor = EventLoop(true);
     server = CreateHttpServer(port, &main_reactor, &thread_pool);
-
     /*服务器开始运行*/
-    alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval).count());
     server->Start();
+    alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval).count());
     main_reactor.StartLoop();
 
     return 0;

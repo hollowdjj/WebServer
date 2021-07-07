@@ -9,7 +9,9 @@
 const int kEpollTimeOut = 10000;             //epoll超时时间10秒(单位为毫秒)
 const int kMaxActiveEventNum = 4096;         //最多监听4096个事件
 
-EventLoop::EventLoop() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
+EventLoop::EventLoop(bool is_main_reactor /*false*/)
+                    : epollfd_(epoll_create1(EPOLL_CLOEXEC)),
+                      is_main_reactor_(is_main_reactor)
 {
     /*!
         注意，这里没有使用epoll_create。这是因为，epoll_create函数的size参数只是一个参考
@@ -17,8 +19,8 @@ EventLoop::EventLoop() : epollfd_(epoll_create1(EPOLL_CLOEXEC))
      */
     assert(epollfd_ != -1);
     active_events_.resize(kMaxActiveEventNum);
-    /*监听管道的读端*/
-    assert(AddEpollEvent(timewheel_.GetTickfdChannel()));
+    /*只有SubReactor才需要监听管道的读端*/
+    if(!is_main_reactor) assert(AddEpollEvent(timewheel_.GetTickfdChannel()));
 }
 
 EventLoop::~EventLoop()
@@ -97,7 +99,6 @@ bool EventLoop::DelEpollEvent(Channel* event_channel)
     }
 
     /*仅连接socket需要删除定时器以及holder*/
-    events_channel_pool_[fd].reset(nullptr);
     if(event_channel->GetHolder())
     {
         timewheel_.DelTimer(event_channel->GetHolder()->GetTimer());
@@ -108,6 +109,7 @@ bool EventLoop::DelEpollEvent(Channel* event_channel)
             --connection_num_;
         }
     }
+    events_channel_pool_[fd].reset(nullptr);
     --channle_num_;
 
     return true;
@@ -115,6 +117,15 @@ bool EventLoop::DelEpollEvent(Channel* event_channel)
 
 void EventLoop::StartLoop()
 {
+    /*子线程需屏蔽SIGALRM信号*/
+    if(!is_main_reactor_)
+    {
+        sigset_t sigset;
+        sigemptyset(&sigset);
+        sigaddset(&sigset,SIGALRM);
+        assert(pthread_sigmask(SIG_BLOCK, &sigset,nullptr) == 0);
+    }
+    /*监听*/
     while(!stop_)
     {
         /*事件池为空时休眠*/
@@ -143,6 +154,7 @@ int EventLoop::GetConnectionNum()
     std::unique_lock<std::mutex> locker(mutex_for_conn_num_);
     return connection_num_;
 }
+
 void EventLoop::GetActiveEventsAndProc()
 {
     while(!stop_)

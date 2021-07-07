@@ -41,8 +41,9 @@ private:
     std::unique_ptr<HttpData> http_data_pool_[GlobalVar::kMaxUserNum];      //每一个连接socket的Channel都会对应一个HttpData对象
 
     TimeWheel timewheel_;                                         //为了避免竞争，让每个事件池都拥有一个独立的时间轮
+    bool is_main_reactor_;                                        //指示是否为MainReactor
 public:
-    EventLoop();
+    explicit EventLoop(bool is_main_reactor = false);
     ~EventLoop();
 
     bool AddEpollEvent(Channel* event_channel);                    //向事件池以及内核事件表中添加新的事件
