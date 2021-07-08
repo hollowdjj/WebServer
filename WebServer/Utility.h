@@ -28,9 +28,7 @@
 @Date: 2021/6/13 上午10:32
 */
 
-///////////////////////////
-//   Global    Variables //
-///////////////////////////
+/*全局变量结构体*/
 struct GlobalVar{
     static const int kMaxUserNum = 100000;                              //最大并发连接数量
     static std::chrono::seconds slot_interval;                          //时间轮的槽间隔
@@ -43,6 +41,12 @@ int SetNonBlocking(int fd);
 
 /*绑定端口号并监听。成功时返回监听socket，否则返回-1s*/
 int BindAndListen(int port);
+
+/*ET模式下从文件描述符(非socket)读n个字节的数据*/
+ssize_t ReadData(int fd, char* dest, size_t n);
+
+/*ET模式下向文件描述符(非socket)写n个字节的数据*/
+ssize_t WriteData(int fd, const char* source, size_t n);
 
 /*线程池*/
 class ThreadPool{

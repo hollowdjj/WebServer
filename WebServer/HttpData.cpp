@@ -35,14 +35,15 @@ void HttpData::LinkTimer(Timer* p_timer)
 void HttpData::ReadHandler()
 {
     /*调整定时器以延迟该连接被关闭的时间*/
-    
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
+
     /*读取数据并显示。ET模式下需一次性把数据读完*/
     char buffer[4096];
     memset(buffer,'\0',4096);
     int fd = p_connfd_channel_->GetFd();
     while(true)
     {
-        /*fd是非阻塞的那么recv就是非阻塞调用。*/
+        /*fd是非阻塞的那么recv就是非阻塞调用*/
         ssize_t ret = recv(fd,buffer,sizeof buffer,0);
         if(ret < 0)
         {
@@ -79,8 +80,8 @@ void HttpData::ReadHandler()
 
         }
     }
-    /*更新timer*/
-
+    /*数据读取完毕后，还需要重新设置timer*/
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 }
 
 void HttpData::WriteHandler()

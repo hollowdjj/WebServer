@@ -1,7 +1,7 @@
 #include "HttpServer.h"
 #include <chrono>
 #include "Utility.h"
-#include <pthread.h>
+#include <stdlib.h>
 
 ///////////////////////////
 //   Global    Variables //
@@ -18,10 +18,11 @@ void CloseServer(int sig)
 void AlarmTick(int sig)
 {
     /*向所有SubReactor的tick_fd[1]写一个字节的数据并重新定时*/
-    int msg = sig;
+    const char* msg = "Tick";
     for (auto& tick_fd : server->tickfds_)
     {
-        write(tick_fd,reinterpret_cast<char*>(&msg),1);
+        WriteData(tick_fd,msg, strlen(msg));
+        //write(tick_fd,reinterpret_cast<char*>(&msg),1);
     }
     alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval).count());
 }

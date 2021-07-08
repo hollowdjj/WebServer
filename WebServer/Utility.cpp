@@ -64,6 +64,53 @@ int BindAndListen(int port)
     return listenfd;
 }
 
+ssize_t ReadData(int fd, char* dest, size_t n)
+{
+    char* pos = dest;       //本次存放读取的数据的首地址
+    size_t num = n;         //本次期望读取num个字节的数据
+    ssize_t read_sum = 0;   //一共读取的字节数
+    ssize_t read_once = 0;  //本次read函数调用成功读取的字节数
+    while(num > 0)
+    {
+        read_once = read(fd, pos, num);
+        if(read_once < 0)
+        {
+            if(errno == EAGAIN || errno == EWOULDBLOCK) return read_sum;  //缓冲区中的所有数据已读出，返回
+            else if(errno == EINTR) read_once = 0;                        //非阻塞read被系统中断打断，read_once为0
+            else return -1;                                               //否则表示发生了错误
+        }
+        else if(read_once == 0) break;                                    //读取完毕，退出循环
+        /*更新*/
+        pos +=read_once;
+        num -= read_once;
+        read_sum+= read_once;
+    }
+
+    return read_sum;
+}
+
+ssize_t WriteData(int fd, const char* source, size_t n)
+{
+    const char* pos = source;      //本次要写入的数据的首地址
+    size_t num = n;                //本次期望写入num个字节的数据
+    ssize_t write_sum = 0;         //一共写入的字节数
+    ssize_t write_once = 0;        //本次write函数调用成功读取的字节数
+    while(num > 0)
+    {
+        write_once = write(fd,pos,num);
+        if(write_once < 0)
+        {
+            if(errno == EAGAIN || errno == EWOULDBLOCK) return write_sum;    //缓冲区已经写满了，返回
+            else if(errno == EINTR) write_once = 0;                          //被系统中断打断
+            else return -1;                                                  //否则出错
+        }
+        pos+=write_once;
+        num-=write_once;
+        write_sum+=write_once;
+    }
+    return write_sum;
+}
+
 ThreadPool::ThreadPool(size_t thread_num) : stop_(false)
 {
     for (int i = 0; i < thread_num; ++i)

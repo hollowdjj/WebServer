@@ -49,13 +49,15 @@ public:
     bool AddEpollEvent(Channel* event_channel);                    //向事件池以及内核事件表中添加新的事件
     [[maybe_unused]]bool ModEpollEvent(Channel* event_channel);    //修改内核事件表中注册的文件描述符想要监听的事件
     bool DelEpollEvent(Channel* event_channel);                    //删除内核事件表中注册的文件描述符
-    void GetActiveEventsAndProc();                                 //得到就绪事件并执行相应的回调函数
     void StartLoop();                                              //开始监听事件
     void QuitLoop();                                               //清空事件池停止运行
 
     int GetConnectionNum();                                        //返回连接数量
     [[maybe_unused]]int GetEpollfd(){return epollfd_;}             //返回epoll内核事件表
     int GetTickfd(){return timewheel_.tick_fd_[1];}                //返回tick管道的写端文件描述符
+    void AdjustTimer(Timer* timer,std::chrono::seconds timeout) {timewheel_.AdjustTimer(timer,timeout);}
+private:
+    void GetActiveEventsAndProc();                                 //得到就绪事件并执行相应的回调函数
 };
 
 
