@@ -59,11 +59,12 @@ void HttpData::ReadHandler()
                 __uint32_t new_option = old_option | EPOLLOUT | ~EPOLLIN;
                 p_connfd_channel_->SetEvents(new_option);
                 printf("get content: %s from socket %d\n",buffer,fd);
+                /*数据读取完毕后，还需要重新设置timer*/
+                p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
                 break;
             }
             /*否则，发生错误，此时关闭连接并删除定时器*/
             DisConndHandler();
-
             break;
         }
         else if(ret ==0)
@@ -80,8 +81,6 @@ void HttpData::ReadHandler()
 
         }
     }
-    /*数据读取完毕后，还需要重新设置timer*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 }
 
 void HttpData::WriteHandler()
