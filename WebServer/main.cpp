@@ -22,6 +22,7 @@ void AlarmTick(int sig)
     for (auto& tick_fd : server->tickfds_)
     {
         WriteData(tick_fd,msg, strlen(msg));
+//        assert(WriteData(tick_fd,msg, strlen(msg)!= strlen(msg)));
         //write(tick_fd,reinterpret_cast<char*>(&msg),1);
     }
     alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval).count());

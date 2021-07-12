@@ -171,7 +171,6 @@ void EventLoop::GetActiveEventsAndProc()
             /*epoll_wait超时，这里的处理方式是继续循环*/
             continue;
         }
-
         /*根据就绪事件，找到事件池中相应的Channel修改其revents_属性后再调用相应的回调函数*/
         for (int i = 0; i < active_event_num; ++i)
         {

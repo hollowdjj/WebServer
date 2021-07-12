@@ -74,7 +74,7 @@ void TimeWheel::Tick()
 {
     /*从管道读出数据以防写满*/
     char msg[128];
-    assert(ReadData(tick_fd_[0],msg,strlen(msg)) != -1);
+    ReadData(tick_fd_[0],msg,128);
 
     /*值得注意的是，这里是在遍历容器的时候删除特定元素。*/
     for (auto it = slots_[current_slot_].begin();it != slots_[current_slot_].end();)
