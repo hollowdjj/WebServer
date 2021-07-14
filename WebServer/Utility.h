@@ -36,22 +36,58 @@ struct GlobalVar{
     static int slot_num;                                                //时间轮的槽数
 };
 
-/*将文件描述符fd设置为非阻塞模式*/
+/*!
+@brief 将文件描述符fd设置为非阻塞模式
+*/
 int SetNonBlocking(int fd);
 
-/*绑定端口号并监听。成功时返回监听socket，否则返回-1s*/
+/*!
+@brief 绑定端口号并监听。成功时返回监听socket的文件描述符，否则返回-1
+*/
 int BindAndListen(int port);
 
-/*ET模式下从文件描述符(非socket)读n个字节的数据*/
+/*!
+@brief ET模式下从文件描述符(非socket)读n个字节的数据
+
+@param[in] fd     文件描述符
+@param[in] dest   存放数据的数组首地址
+@param[in] n      期望读取的字节数
+@return           成功读取的字节数。-1表示数据读取出粗
+*/
 ssize_t ReadData(int fd, char* dest, size_t n);
 
-/*ET模式下向文件描述符(非socket)写n个字节的数据*/
+/*!
+@brief ET模式下从连接socket读取数据
+
+@param[in] fd           连接socket的文件描述符
+@param[in] buffer       存放数据的string
+@param[in] disconnect   true表示客户端已断开连接，false表示客户端未断开连接
+@return                 成功读取的字节数。-1表示数据读取出错
+*/
+ssize_t  ReadData(int fd,std::string& buffer,bool& disconnect);
+
+/*!
+@brief ET模式下向文件描述符(非socket)写n个字节的数据
+
+@param[in] fd      文件描述符
+@param[in] source  待写数据的首地址
+@param[in] n       待写数据的字节数
+@return            成功写出的字节数。-1表示写数据出错
+*/
 ssize_t WriteData(int fd, const char* source, size_t n);
+
+/*!
+@brief ET模式下向连接socket写入数据并删除buffer中成功写出的数据
+
+@param[in] fd      连接socket的文件描述符
+@param[in] buffer  待写的数据
+@return            成功写出的字节数。-1表示写数据出错
+*/
+ssize_t WriteData(int fd,std::string& buffer);
 
 /*线程池*/
 class ThreadPool{
 private:
-   // std::vector<std::pair<std::shared_ptr<Ev>>>
     std::vector<std::thread> workers_;           //线程池
     std::queue<std::function<void()>> tasks_;    //任务队列
     std::mutex mutex_;                           //互斥锁

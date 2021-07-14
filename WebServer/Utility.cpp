@@ -1,9 +1,12 @@
 #include "Utility.h"
 
-/*设定一个默认值*/
+///////////////////////////
+//   Global    Variables //
+///////////////////////////
 std::chrono::seconds GlobalVar::slot_interval = std::chrono::seconds(1); /* NOLINT */
 std::chrono::seconds GlobalVar::timer_timeout = std::chrono::seconds(5); /* NOLINT */
 int GlobalVar::slot_num = 60;
+const int kMaxBufferSize = 4096;
 
 int SetNonBlocking(int fd)
 {
@@ -35,7 +38,7 @@ int BindAndListen(int port)
     }
 
     /*绑定地址*/
-    sockaddr_in server_addr;
+    sockaddr_in server_addr{};
     bzero(&server_addr,sizeof server_addr);
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
@@ -89,6 +92,42 @@ ssize_t ReadData(int fd, char* dest, size_t n)
     return read_sum;
 }
 
+ssize_t ReadData(int fd,std::string& buffer,bool& disconnect)
+{
+    ssize_t read_once = 0;   //本次读取的字节数
+    ssize_t read_sum = 0;    //读取的总字节数
+    while(true)
+    {
+        char temp[kMaxBufferSize];
+        memset(temp,'\0',4096);
+        read_once = recv(fd,temp,kMaxBufferSize,0);
+        if(read_once < 0)
+        {
+            if(errno == EINTR) continue;                                      //被系统中断就再重新读一次
+            if(errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                /*!
+                  ET模式下，连接socket的可读事件就绪，表明缓冲区中有数据可读。所以，不用考虑
+                  那种由于一开始就没有数据可读从而返回EWOULDBLOCK的情况。当错误代码为EAGAIN
+                  或EWOULDBLOCK时，我们就认为数据已经读取完毕。
+                 */
+                return read_sum;
+            }
+            printf("error on reading data from connfd: %s", strerror(errno)); //否则数据读取出错
+            return -1;
+        }
+        else if(read_once == 0)
+        {
+             disconnect = true;             //一般情况下，recv返回0是由于客户端关闭连接导致的。
+             break;
+        }
+        read_sum +=read_once;
+        buffer += std::string(std::begin(temp),std::begin(temp)+read_once);  //拼接数据
+    }
+
+    return read_sum;
+}
+
 ssize_t WriteData(int fd, const char* source, size_t n)
 {
     const char* pos = source;      //本次要写入的数据的首地址
@@ -108,6 +147,37 @@ ssize_t WriteData(int fd, const char* source, size_t n)
         num-=write_once;
         write_sum+=write_once;
     }
+    return write_sum;
+}
+
+ssize_t WriteData(int fd,std::string& buffer)
+{
+    auto num = buffer.size();      //期望写出的字节数
+    ssize_t write_once = 0;        //本次写出的字节数
+    ssize_t write_sum = 0;         //写出的总字节数
+    const char* ptr = buffer.c_str();
+    
+    while(num > 0)
+    {
+        write_once = send(fd, ptr, num, 0);
+        if(write_once < 0)
+        {
+            if(errno == EAGAIN || errno==EWOULDBLOCK)  return write_sum;  //缓冲区已经写满了，返回
+            else if(errno == EINTR)
+            {
+                write_once = 0;
+                continue;                                                 //被系统中断打断时重新再写一次
+            }
+            return -1;                                                    //否则写数据出错
+        }
+        num-=write_once;
+        write_sum+=write_once;
+        ptr+=write_once;
+    }
+    /*从buffer中删除已经写出的数据*/
+    if(write_sum == buffer.size()) buffer.clear();
+    else buffer = buffer.substr(write_sum);
+    
     return write_sum;
 }
 

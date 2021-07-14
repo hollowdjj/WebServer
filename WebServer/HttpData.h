@@ -5,7 +5,9 @@
 
 /*STD Headers*/
 #include <string>
-
+#include <unordered_map>
+#include <thread>
+#include <mutex>
 /*User-define Headers*/
 
 /*前向声明*/
@@ -45,5 +47,26 @@ private:
     void ExpiredHandler();                                          //连接socket的超时处理
 };
 
+/*！
+@Author: DJJ
+@Description: Mime类
+
+ 保存文件后缀与文件类型的映射。
+
+@Date: 2021/7/14 下午7:25
+*/
+class MimeType{
+private:
+    static void Init();                                             //初始化mime_对象，必须保证只能调用一次
+    static std::unordered_map<std::string,std::string> mime_;       //文件后缀与文件类型的映射
+    MimeType() = default;
+public:
+    MimeType(const MimeType&) = delete;
+    MimeType& operator=(const MimeType&) = delete;
+
+    static std::string GetMime(const std::string& suffix);          //根据后缀获取文件类型
+private:
+    static std::once_flag flag_;                                    //once_flag这里必须为static
+};
 
 #endif //WEBSERVER_HTTPDATA_H

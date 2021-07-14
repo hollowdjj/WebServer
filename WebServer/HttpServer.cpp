@@ -103,7 +103,7 @@ void HttpServer::NewConnHandler()
     connfd_channel->SetHolder(new HttpData(sub_reactors_[index].get(),connfd_channel));
     if(sub_reactors_[index]->AddEpollEvent(connfd_channel))
     {
-        printf("new connection established through socket %d and handled by subreactor %d\n",connfd,index);
+        printf("new connection established through socket %d and handled by subreactor %lu\n",connfd,index);
         ++num_of_each[index];
     }
 
