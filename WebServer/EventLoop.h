@@ -45,7 +45,9 @@ private:
 public:
     explicit EventLoop(bool is_main_reactor = false);
     ~EventLoop();
-
+    //TODO 应该把添加超时时间的借口暴露出来。首先，在连接建立后，设置一个默认超时时间，过了\
+           这个时间还没有接收到http请求报文就断开连接。接收到请求报文后，再根据keep-alive字段\
+           修改超时时间
     bool AddEpollEvent(Channel* event_channel);                    //向事件池以及内核事件表中添加新的事件
     [[maybe_unused]]bool ModEpollEvent(Channel* event_channel);    //修改内核事件表中注册的文件描述符想要监听的事件
     bool DelEpollEvent(Channel* event_channel);                    //删除内核事件表中注册的文件描述符

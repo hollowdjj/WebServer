@@ -78,11 +78,15 @@ ssize_t ReadData(int fd, char* dest, size_t n)
         read_once = read(fd, pos, num);
         if(read_once < 0)
         {
-            if(errno == EAGAIN || errno == EWOULDBLOCK) return read_sum;  //缓冲区中的所有数据已读出，返回
-            else if(errno == EINTR) read_once = 0;                        //非阻塞read被系统中断打断，read_once为0
-            else return -1;                                               //否则表示发生了错误
+            if(errno == EINTR) continue;               //被系统中断就再重新读一次
+            else if(errno == EAGAIN) return read_sum;  //当前无数据可读，返回已读取的字节数
+            else
+            {
+                printf("read data from filefd %d error: %s",fd, strerror(errno));
+                return -1;                        //否则表示发生了错误，返回-1
+            }
         }
-        else if(read_once == 0) break;                                    //读取完毕，退出循环
+        else if(read_once == 0) break;            //read函数返回0表示读取完毕，退出循环
         /*更新*/
         pos +=read_once;
         num -= read_once;
@@ -103,23 +107,31 @@ ssize_t ReadData(int fd,std::string& buffer,bool& disconnect)
         read_once = recv(fd,temp,kMaxBufferSize,0);
         if(read_once < 0)
         {
+            /*!
+             对非阻塞I/O：
+             1.若当前没有数据可读，函数会立即返回-1，同时errno被设置为EAGAIN或EWOULDBLOCK。
+               若被系统中断打断，返回值同样为-1,但errno被设置为EINTR。对于被系统中断的情况，
+               采取的策略为重新再读一次，因为我们无法判断缓冲区中是否有数据可读。然而，对于
+               EAGAIN或EWOULDBLOCK的情况，就直接返回，因为操作系统明确告知了我们当前无数据
+               可读。
+             2.若当前有数据可读，那么recv函数并不会立即返回，而是开始从内核中将数据拷贝到用
+               户区，这是一个同步操作，返回值为这一次函数调用成功拷贝的字节数。所以说，非阻
+               塞I/O本质上还是同步的，并不是异步的。
+             */
             if(errno == EINTR) continue;                                      //被系统中断就再重新读一次
-            if(errno == EAGAIN || errno == EWOULDBLOCK)
+            else if(errno == EAGAIN || errno == EWOULDBLOCK) return read_sum; //当前无数据可读
+            else
             {
-                /*!
-                  ET模式下，连接socket的可读事件就绪，表明缓冲区中有数据可读。所以，不用考虑
-                  那种由于一开始就没有数据可读从而返回EWOULDBLOCK的情况。当错误代码为EAGAIN
-                  或EWOULDBLOCK时，我们就认为数据已经读取完毕。
-                 */
-                return read_sum;
+                printf("read data from socket %d error: %s",fd,strerror(errno));
+                return -1;                        //否则表示发生了错误，返回-1
             }
-            printf("error on reading data from connfd: %s", strerror(errno)); //否则数据读取出错
-            return -1;
         }
         else if(read_once == 0)
         {
-             disconnect = true;             //一般情况下，recv返回0是由于客户端关闭连接导致的。
-             break;
+            /*一般情况下，recv返回0是由于客户端关闭连接导致的*/
+            printf("clinet %d has close the connection\n",fd);
+            disconnect = true;
+            break;
         }
         read_sum +=read_once;
         buffer += std::string(std::begin(temp),std::begin(temp)+read_once);  //拼接数据
@@ -139,9 +151,13 @@ ssize_t WriteData(int fd, const char* source, size_t n)
         write_once = write(fd,pos,num);
         if(write_once < 0)
         {
-            if(errno == EAGAIN || errno == EWOULDBLOCK) return write_sum;    //缓冲区已经写满了，返回
-            else if(errno == EINTR) write_once = 0;                          //被系统中断打断
-            else return -1;                                                  //否则出错
+            if(errno == EINTR) continue;                 //被系统中断打断，就重写一次
+            else if(errno == EAGAIN) return write_sum;   //客户端或者服务器自身的缓冲区已经写满了，返回
+            else
+            {
+                printf("write data to filefd %d error: %s",fd, strerror(errno));
+                return -1;                               //否则表示发生了错误，返回-1
+            }
         }
         pos+=write_once;
         num-=write_once;
@@ -156,19 +172,18 @@ ssize_t WriteData(int fd,std::string& buffer)
     ssize_t write_once = 0;        //本次写出的字节数
     ssize_t write_sum = 0;         //写出的总字节数
     const char* ptr = buffer.c_str();
-    
     while(num > 0)
     {
         write_once = send(fd, ptr, num, 0);
         if(write_once < 0)
         {
-            if(errno == EAGAIN || errno==EWOULDBLOCK)  return write_sum;  //缓冲区已经写满了，返回
-            else if(errno == EINTR)
+            if(errno == EINTR) continue;                                      //被系统中断打断时重新再写一次
+            else if(errno == EAGAIN || errno==EWOULDBLOCK)  return write_sum; //客户端或者服务器的缓冲区已经写满了，返回
+            else
             {
-                write_once = 0;
-                continue;                                                 //被系统中断打断时重新再写一次
+                printf("write data to socket %d error: %s",fd, strerror(errno));
+                return -1;                                                    //否则表示发生了错误，返回-1
             }
-            return -1;                                                    //否则写数据出错
         }
         num-=write_once;
         write_sum+=write_once;

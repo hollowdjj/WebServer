@@ -72,7 +72,7 @@ ssize_t  ReadData(int fd,std::string& buffer,bool& disconnect);
 @param[in] fd      文件描述符
 @param[in] source  待写数据的首地址
 @param[in] n       待写数据的字节数
-@return            成功写出的字节数。-1表示写数据出错
+@return            成功写出的字节数。-1表示写数据出错。返回0不一定表示source的数据都写完了
 */
 ssize_t WriteData(int fd, const char* source, size_t n);
 
@@ -81,7 +81,7 @@ ssize_t WriteData(int fd, const char* source, size_t n);
 
 @param[in] fd      连接socket的文件描述符
 @param[in] buffer  待写的数据
-@return            成功写出的字节数。-1表示写数据出错
+@return            成功写出的字节数。-1表示写数据出错。返回0不一定表示buffer的所有数据都写完了
 */
 ssize_t WriteData(int fd,std::string& buffer);
 

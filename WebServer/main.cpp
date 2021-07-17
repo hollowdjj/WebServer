@@ -21,6 +21,7 @@ void AlarmTick(int sig)
     const char* msg = "Tick";
     for (auto& tick_fd : server->tickfds_)
     {
+        //TODO 可能没有写出数据
         WriteData(tick_fd,msg, strlen(msg));
 //        assert(WriteData(tick_fd,msg, strlen(msg)!= strlen(msg)));
         //write(tick_fd,reinterpret_cast<char*>(&msg),1);

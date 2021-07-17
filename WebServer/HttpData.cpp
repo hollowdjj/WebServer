@@ -1,11 +1,16 @@
 #include "HttpData.h"
 #include "Channel.h"
 #include "EventLoop.h"
+#include <ctime>
+#include <iomanip>
 
 /*-----------------------HttpData类-------------------------*/
 
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
-                        :p_sub_reactor_(sub_reactor),p_connfd_channel_(connfd_channel),p_timer_(nullptr)
+                        :p_sub_reactor_(sub_reactor),
+                         p_connfd_channel_(connfd_channel),
+                         p_timer_(nullptr),
+                         http_method_(HttpMethod::kEmpty)
 {
     if(p_connfd_channel_)
     {
@@ -39,32 +44,51 @@ void HttpData::ReadHandler()
     /*从连接socket读取数据*/
     int fd = p_connfd_channel_->GetFd();
     bool disconnect = false;
-    auto read_num = ReadData(fd,read_in_buffer,disconnect);
-    if(read_num < 0 || disconnect) DisConndHandler();     //读取数据出错或者客户端关闭了连接时，关闭连接
+    auto read_num = ReadData(fd, read_in_buffer_, disconnect);
+    printf("client %d Request:\n%s\n",fd,read_in_buffer_.c_str());
+    if(read_num < 0 || disconnect)
+    {
+        //TODO 对于由服务端读取socket数据或向socket写数据时发送错误的情况，最好先发送一个error信息给客户端\
+               再关闭连接。而对于超时，则也是先发送一个error告诉客户端超时了，然后再关闭连接
+        /*read_num < 0读取数据错误可能是socket连接出了问题，这个时候最好由服务端主动断开连接*/
+        DisConndHandler();
+        return;
+    }
 
-    /*数据读完后，服务端准备向客户端写数据。此时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
-    __uint32_t old_option = p_connfd_channel_->GetEvents();
-    __uint32_t new_option = old_option | EPOLLOUT | ~EPOLLIN;
-    p_connfd_channel_->SetEvents(new_option);
-    printf("get content: %s from socket %d\n",read_in_buffer.c_str(),fd);
-
-    /*数据读取完毕后，还需要重新设置timer*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
-
-    //TODO 解析Http请求报文
+    /*解析Http请求报文*/
+    RequestLineParseState flag = ParseRequestLine();
+    if(flag == RequestLineParseState::kParseError) ErrorHandler(fd,400,"Bad Request");
+    printf("get content: %s from socket %d\n", read_in_buffer_.c_str(), fd);
+    //TODO 解析首部行
 }
 
 void HttpData::WriteHandler()
 {
+    /*调整定时器以延迟该连接被关闭的时间*/
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
+
+    /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
+    MutexRegInOrOut(false);
+
     /*向连接socket写数据*/
     int fd = p_connfd_channel_->GetFd();
-    auto write_size = WriteData(fd,write_out_buffer);
-    if(write_size < 0) DisConndHandler();    //若写数据出错，就关闭连接
+    while(true)
+    {
+        /*由于是正常的响应报文，所以一定要把数据完全写出*/
+        auto ret = WriteData(fd, write_out_buffer_);
+        if(ret < 0)
+        {
+            DisConndHandler();
+            break;
+        }
+        else if(ret < write_out_buffer_.size()) continue;
+    }
 
-    /*写完数据之后，需要删除注册的EPOLLOUT事件，并重新注册EPOLLIN事件*/
-    __uint32_t old_option = p_connfd_channel_->GetEvents();
-    __uint32_t new_option = old_option | EPOLLIN | ~EPOLLOUT;
-    p_connfd_channel_->SetEvents(new_option);
+    /*发送完数据后，需删除EPOLLOUT事件并重新注册EPOLLIN事件*/
+    MutexRegInOrOut(true);
+    
+    /*重新计时*/
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 }
 
 void HttpData::DisConndHandler()
@@ -76,27 +100,37 @@ void HttpData::DisConndHandler()
 
 void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
 {
-//    /*获取错误信息*/
-//    printf("get an error from client: %d\n",fd);
-//    char error[100];
-//    socklen_t length = sizeof error;
-//    memset(error,'\0',100);
-//    if(getsockopt(fd,SOL_SOCKET,SO_ERROR,&error,&length)<0) { printf("get socket error message failed\n");}
-//
-//    /*向客户端发送错误信息*/
-//    send(fd,error,length,0);
+    /*调整定时器以延迟该连接被关闭的时间*/
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 
-      /*编写响应报文的entidy body*/
-      std::string response_body;
-      response_body += "";
-      /*编写响应报文的header*/
-      std::string response_header;
-      response_header += "HTTP/1.1 " + std::to_string(error_num) + msg + "\r\n";   //状态行
-      response_header += "Date: ";
-      response_header += "Server: Hollow-Dai\r\n";
-      response_header += "Content-Type: text/html\r\n";
-      response_header += "Connection: Close\r\n";
-      response_header += "Content-Length: " + std::to_string(response_body.size()) + "\r\n";
+    /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
+    MutexRegInOrOut(false);
+
+    /*编写响应报文的entidy body*/
+    std::string response_body;
+    response_body += "<html><title>错误</title>";
+    response_body += "<body bgcolor=\"ffffff\">";
+    response_body += std::to_string(error_num) + msg;
+    response_body += "<hr><em> Hollow-Dai Server</em>\n</body></html>";
+
+    /*编写响应报文的header*/
+    std::string response_header;
+    std::time_t t = std::time(nullptr);
+    auto time = std::ctime(&t);
+    response_header += "HTTP/1.1 " + std::to_string(error_num) + msg + "\r\n";
+    response_header += "Date: " + std::string(time) + " GMT\r\n";
+    response_header += "Server: Hollow-Dai\r\n";
+    response_header += "Content-Type: text/html\r\n";
+    response_header += "Connection: close\r\n";
+    response_header += "Content-Length: " + std::to_string(response_body.size()) + "\r\n";
+    response_header += "\r\n";
+    
+    /*向客户端发送响应报文*/
+    std::string response_buffer = response_header + response_body;
+    while(WriteData(fd,response_buffer));       //尽可能地向客户端发送数据，没写完就算了，不进行错误处理。
+    
+    /*发送完数据后，需删除EPOLLOUT事件并重新注册EPOLLIN事件*/
+    MutexRegInOrOut(true);
 }
 
 void HttpData::ExpiredHandler()
@@ -105,6 +139,76 @@ void HttpData::ExpiredHandler()
     DisConndHandler();
 }
 
+RequestLineParseState HttpData::ParseRequestLine()
+{
+    /*!
+        Http请求报文的请求行的格式为：
+        请求方法|空格|URL|空格|协议版本|回车符|换行符。其中URL以‘/’开始。例如：
+        GET /index.html HTTP/1.1\r\n
+     */
+
+    /*必须要接收到完整的请求行才能开始解析*/
+    auto pos = read_in_buffer_.find("\r\n");
+    if(pos == std::string::npos) return RequestLineParseState::kParseError;
+
+    /*从read_in_buffer中截取出请求行*/
+    auto request_line = read_in_buffer_.substr(0,pos);
+    read_in_buffer_.erase(0,pos+2);
+
+    /*判断方法字段是GET POST还是HEAD*/
+    decltype(pos) pos_method;
+    std::string method;
+    if((pos_method = request_line.find("GET")) == 0)
+    {
+        method = "GET";
+        http_method_ = HttpMethod::kGet;
+    }
+    else if((pos_method = request_line.find("POST")) == 0)
+    {
+        method = "POST";
+        http_method_ = HttpMethod::kPost;
+    }
+    else if((pos_method = request_line.find("HEAD")) == 0)
+    {
+        method = "HEAD";
+        http_method_ = HttpMethod::kHead;
+    }
+    else return RequestLineParseState::kParseError;
+
+    /*解析URL*/
+    decltype(pos_method) pos_space,pos_slash,pos_http;
+    if((pos_space = request_line.find(' ')) == std::string::npos
+       || pos_space != method.size()                                //方法字段后必须有个空格
+       || (pos_slash = request_line.find('/',pos_space)) == std::string::npos
+       || pos_slash != pos_space + 1                                //URL必须紧接着方法字段后面的那个空格且以斜杠开头
+       || (pos_http = request_line.rfind("HTTP/",pos)) == std::string::npos
+       || pos_http + 8 != pos)                                      //HTTP字段必须满足HTTP/0.0\r\n的格式
+    {
+        return RequestLineParseState::kParseError;
+    }
+    else
+    {
+        filename_ = request_line.substr(pos_slash+1,pos_http-pos_slash-2);
+    }
+    /*解析http协议的版本号*/
+    std::string version;
+    version = request_line.substr(pos-3,pos);
+    if(version == "1.0") http_version_ = HttpVersion::kHttp10;
+    else if(version == "1.1") http_version_ = HttpVersion::kHttp11;
+    else return RequestLineParseState::kParseError;
+
+    return RequestLineParseState::kParseSuccess;
+}
+
+void HttpData::MutexRegInOrOut(bool epollin)
+{
+    /*epollin为true时，表示注册EPOLLIN而不注册EPOLLOUT，反之。*/
+    __uint32_t old_option = p_connfd_channel_->GetEvents();
+    __uint32_t new_option;
+    if(epollin) new_option = old_option | EPOLLIN | ~EPOLLOUT;
+    else new_option = old_option | ~EPOLLIN | EPOLLOUT;
+    p_connfd_channel_->SetEvents(new_option);
+}
 
 /*-----------------------MimeType类-------------------------*/
 std::unordered_map<std::string,std::string> MimeType::mime_{};

@@ -9,3 +9,4 @@ set(SRC_LIST main.cpp Channel.cpp HttpServer.cpp Utility.cpp EventLoop.cpp HttpD
 
 add_executable(WebServer ${SRC_LIST})
 add_executable(client ./test/HttpClient.cpp)
+add_executable(Test ./test/Test.cpp)
