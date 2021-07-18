@@ -27,13 +27,15 @@
 @Description: 定义工具函数以及工具类
 @Date: 2021/6/13 上午10:32
 */
-
+//TODO 设置两种超时时间 一是等待请求报文到来的超时时间 二是长连接的超时时间
 /*全局变量结构体*/
 struct GlobalVar{
     static const int kMaxUserNum = 100000;                              //最大并发连接数量
     static std::chrono::seconds slot_interval;                          //时间轮的槽间隔
     static std::chrono::seconds timer_timeout ;                         //timer的超时时间
+    static std::chrono::seconds keep_alive_timeout;                     //长连接的超时时间
     static int slot_num;                                                //时间轮的槽数
+    static char favicon[555];
 };
 
 /*!

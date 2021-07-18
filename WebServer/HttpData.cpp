@@ -9,8 +9,9 @@
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
                         :p_sub_reactor_(sub_reactor),
                          p_connfd_channel_(connfd_channel),
-                         p_timer_(nullptr),
-                         http_method_(HttpMethod::kEmpty)
+                         http_method_(HttpMethod::kEmpty),
+                         http_version_(HttpVersion::kEmpty),
+                         request_msg_parse_state_(RequestMsgParseState::kStart)
 {
     if(p_connfd_channel_)
     {
@@ -18,6 +19,10 @@ HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
         p_connfd_channel_->SetReadHandler([this](){ReadHandler();});
         p_connfd_channel_->SetWriteHandler([this](){WriteHandler();});
     }
+    /*填充请求报文中方法字段与相应业务处理函数的映射*/
+    method_proc_func_[HttpMethod::kGet]  = [this](){return ProcessGETorHEAD();};
+    method_proc_func_[HttpMethod::kHead] = [this](){return ProcessGETorHEAD();};
+    method_proc_func_[HttpMethod::kPost] = [this](){return ProcessPOST();};
 }
 
 HttpData::~HttpData()
@@ -48,18 +53,83 @@ void HttpData::ReadHandler()
     printf("client %d Request:\n%s\n",fd,read_in_buffer_.c_str());
     if(read_num < 0 || disconnect)
     {
-        //TODO 对于由服务端读取socket数据或向socket写数据时发送错误的情况，最好先发送一个error信息给客户端\
-               再关闭连接。而对于超时，则也是先发送一个error告诉客户端超时了，然后再关闭连接
         /*read_num < 0读取数据错误可能是socket连接出了问题，这个时候最好由服务端主动断开连接*/
         DisConndHandler();
         return;
     }
 
-    /*解析Http请求报文*/
-    RequestLineParseState flag = ParseRequestLine();
-    if(flag == RequestLineParseState::kParseError) ErrorHandler(fd,400,"Bad Request");
-    printf("get content: %s from socket %d\n", read_in_buffer_.c_str(), fd);
-    //TODO 解析首部行
+    /*解析http请求报文*/
+    bool finish = false;
+    while(!finish)
+    {
+        switch (request_msg_parse_state_) {
+            /*State1: 解析请求报文的请求行*/
+            case RequestMsgParseState::kStart:{
+                RequestLineParseState flag = ParseRequestLine();
+                switch (flag) {
+                    case RequestLineParseState::kParseAgain:                //未接收到完整的请求行，返回，等待下一波数据的到来
+                        return;
+                    case RequestLineParseState::kParseError:                //请求行语法错误，向客户端发送错误代码400并重置
+                        ErrorHandler(fd, 400, "Bad Request: Request line has syntax error");
+                        return;
+                    case RequestLineParseState::kParseSuccess:              //成功解析了请求行
+                        request_msg_parse_state_ = RequestMsgParseState::kRequestLineOK;
+                        break;
+                }
+            }break;
+            /*State2: 解析请求报文的首部行*/
+            case RequestMsgParseState::kRequestLineOK:{
+                HeaderLinesParseState flag = ParseHeaderLines();
+                switch (flag) {
+                    case HeaderLinesParseState::kParseAgain:                //首部行数据不完整，返回，等待下一波数据到来
+                        return;
+                    case HeaderLinesParseState::kParseError:                //首部行语法错误，向客户端发送错误代码400并重置
+                        ErrorHandler(fd,400,"Bad Request: Header lines have syntax error");
+                        return;
+                    case HeaderLinesParseState::kParseSuccess:              //成功解析了首部行
+                        request_msg_parse_state_ = RequestMsgParseState::kHeaderLinesOK;
+                        break;
+                }
+            }break;
+            /*State3: 对于POST请求，服务端要检查请求报文中的实体数据是否完整，而GET和HEAD则不用*/
+            case RequestMsgParseState::kHeaderLinesOK:{
+                if(http_method_ == HttpMethod::kPost)
+                    request_msg_parse_state_ = RequestMsgParseState::kCheckBody;
+                else
+                    request_msg_parse_state_ = RequestMsgParseState::kAnalysisRequest;
+            }break;
+            /*State4: 查询实体数据大小并判断实体数据是否全部读到了*/
+            case RequestMsgParseState::kCheckBody:{
+                if(headers_values_.find("Content-Length") != headers_values_.end())
+                {
+                    int content_length = std::stoi(headers_values_["Content-Length"]);
+                    if(content_length + 2 != read_in_buffer_.size()) return;     //请求报文数据未全部接收，返回，等待数据到来
+                }
+                else
+                {
+                    //请求报文首部行中有语法错误，发送错误代码和信息并重置
+                    ErrorHandler(fd,400,"Bad Request: Lack of argument (Content-Length)");
+                    return;
+                }
+                request_msg_parse_state_ = RequestMsgParseState::kAnalysisRequest;
+            }break;
+            /*State5: 分析客户端请求*/
+            case RequestMsgParseState::kAnalysisRequest:{
+                RequestMsgAnalysisState flag = AnalysisRequest();
+                switch (flag) {
+                    case RequestMsgAnalysisState::kAnalysisError:       //发生错误，错误代码机信息的发送在业务函数中完成。
+                        return;
+                    case RequestMsgAnalysisState::kAnalysisSuccess:     //成功。相应操作，如数据发送也在业务函数中完成。
+                        request_msg_parse_state_ = RequestMsgParseState::kFinish;
+                        break;
+                }
+            }break;
+            /*State6: 请求报文全部解析完成，结束while循环*/
+            case RequestMsgParseState::kFinish:
+                finish = true;
+                break;
+        }
+    }
 }
 
 void HttpData::WriteHandler()
@@ -86,9 +156,6 @@ void HttpData::WriteHandler()
 
     /*发送完数据后，需删除EPOLLOUT事件并重新注册EPOLLIN事件*/
     MutexRegInOrOut(true);
-    
-    /*重新计时*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 }
 
 void HttpData::DisConndHandler()
@@ -131,10 +198,14 @@ void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
     
     /*发送完数据后，需删除EPOLLOUT事件并重新注册EPOLLIN事件*/
     MutexRegInOrOut(true);
+
+    /*重置*/
+    Reset();
 }
 
 void HttpData::ExpiredHandler()
 {
+    //TODO 告知客户端已超时
     printf("client %d is silent for a while, preparing to shut it down\n",p_connfd_channel_->GetFd());
     DisConndHandler();
 }
@@ -149,11 +220,11 @@ RequestLineParseState HttpData::ParseRequestLine()
 
     /*必须要接收到完整的请求行才能开始解析*/
     auto pos = read_in_buffer_.find("\r\n");
-    if(pos == std::string::npos) return RequestLineParseState::kParseError;
+    if(pos == std::string::npos) return RequestLineParseState::kParseAgain;
 
     /*从read_in_buffer中截取出请求行*/
     auto request_line = read_in_buffer_.substr(0,pos);
-    read_in_buffer_.erase(0,pos+2);
+    read_in_buffer_.erase(0,pos);        //不要把\r\n也截取了，这样解析首部行时会方便一点
 
     /*判断方法字段是GET POST还是HEAD*/
     decltype(pos) pos_method;
@@ -200,6 +271,104 @@ RequestLineParseState HttpData::ParseRequestLine()
     return RequestLineParseState::kParseSuccess;
 }
 
+HeaderLinesParseState HttpData::ParseHeaderLines()
+{
+    /*!
+        只检查每一行的格式。首部行的格式必须为"字段名：|空格|字段值|cr|lf"
+        对首部字段是否正确，字段值是否正确均不做判断。
+     */
+    auto FormatCheck = [this](std::string& target) -> bool
+    {
+        auto pos_colon = target.find(':');
+        if(islower(target[0])                     //字段名的首字母必须大写
+          ||pos_colon == std::string::npos        //字段名后必须有冒号
+          || target[pos_colon+1] != ' '           //冒号后面必须紧跟一个空格
+          || pos_colon+1 == target.size()-1)      //空格后面必须要有值
+            return false;
+
+        /*保存首部字段和对应的值*/
+        std::string header = target.substr(0,pos_colon);
+        std::string value = target.substr(pos_colon+2,target.size()-1-pos_colon-2+1);
+        headers_values_[header] = value;
+        return true;
+    };
+
+    /*判断每个首部行的格式是否正确*/
+    decltype(read_in_buffer_.size()) pos_cr = 0,old_pos = 0;
+    while(pos_cr != std::string::npos)
+    {
+        old_pos = pos_cr;
+        //接收到完整的首部行才开始解析
+        if((pos_cr = read_in_buffer_.find("\r\n",pos_cr + 2)) == std::string::npos) break;
+        if(pos_cr == old_pos + 2)
+        {
+            //解析到空行了，则说明首部行格式没问题且数据完整。此时清除已解析的header
+            read_in_buffer_ = read_in_buffer_.substr(pos_cr);
+            return HeaderLinesParseState::kParseSuccess;
+        }
+
+        std::string header_line = read_in_buffer_.substr(old_pos+2,pos_cr-old_pos-2);
+        if(!FormatCheck(header_line)) return HeaderLinesParseState::kParseError;
+    } //跳出循环时，old_pos为最后一个完整首部行\r的索引或者0
+
+    /*没有解析到空行，且目前已解析了的首部行格式均正确，说明请求报文中的后续数据还在传输中*/
+    read_in_buffer_ = read_in_buffer_.substr(old_pos);  //清除已经解析了的完整首部行
+    return HeaderLinesParseState::kParseAgain;
+}
+
+RequestMsgAnalysisState HttpData::AnalysisRequest()
+{
+    return method_proc_func_[http_method_]();
+}
+
+RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
+{
+    /*!
+        HEAD方法与GET方法一样，只是不返回报文主体部分。
+        一般用来确认URI的有效性以及资源更新的日期时间等。
+     */
+
+    /*响应报文的状态行*/
+    std::string version;
+    if(http_version_ == HttpVersion::kHttp10)      version = "HTTP/1.0";
+    else if(http_version_ == HttpVersion::kHttp11) version = "HTTP/1.1";
+    std::string status_line = version + " 200 OK\r\n";
+
+    /*响应报文的首部行*/
+    std::string header_lines;
+    if(headers_values_["Connection"] == "keep-alive")        //keep-alive字段
+    {
+        keep_alive_ = true;
+        header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
+                + std::to_string(GlobalVar::keep_alive_timeout.count()) + "\r\n";
+    }
+    else
+    {
+        keep_alive_ = false;
+        header_lines +="Connection: close\r\n";
+    }
+    std::string::size_type pos_dot = filename_.find('.');
+    std::string file_type = pos_dot == std::string::npos ?
+                            MimeType::GetMime("default") :  MimeType::GetMime(filename_.substr(pos_dot));  //文件类型
+
+    //echo test
+    if(filename_ == "hello")
+    {
+        header_lines += "Content-type: text/plain\r\n\r\nHello World";
+        return RequestMsgAnalysisState::kAnalysisSuccess;
+    }
+    else if(filename_ == "favicon.ico")
+    {
+        header_lines += "Content-Type: image/png\r\n";
+        header_lines += "Content-Length: " + std::to_string(strlen(GlobalVar::favicon));
+    }
+
+}
+
+RequestMsgAnalysisState HttpData::ProcessPOST()
+{
+
+}
 void HttpData::MutexRegInOrOut(bool epollin)
 {
     /*epollin为true时，表示注册EPOLLIN而不注册EPOLLOUT，反之。*/
@@ -208,6 +377,18 @@ void HttpData::MutexRegInOrOut(bool epollin)
     if(epollin) new_option = old_option | EPOLLIN | ~EPOLLOUT;
     else new_option = old_option | ~EPOLLIN | EPOLLOUT;
     p_connfd_channel_->SetEvents(new_option);
+}
+
+void HttpData::Reset()
+{
+    read_in_buffer_.clear();
+    write_out_buffer_.clear();
+    filename_.clear();
+    headers_values_.clear();
+    request_msg_parse_state_ = RequestMsgParseState::kStart;
+    http_method_ = HttpMethod::kEmpty;
+    http_version_ = HttpVersion::kEmpty;
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 }
 
 /*-----------------------MimeType类-------------------------*/
