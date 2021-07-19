@@ -3,7 +3,9 @@
 #include "EventLoop.h"
 #include <ctime>
 #include <iomanip>
-
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <fcntl.h>
 /*-----------------------HttpData类-------------------------*/
 
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
@@ -328,15 +330,21 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
         一般用来确认URI的有效性以及资源更新的日期时间等。
      */
 
-    /*响应报文的状态行*/
+    /*状态行*/
     std::string version;
     if(http_version_ == HttpVersion::kHttp10)      version = "HTTP/1.0";
     else if(http_version_ == HttpVersion::kHttp11) version = "HTTP/1.1";
     std::string status_line = version + " 200 OK\r\n";
 
-    /*响应报文的首部行*/
+    /*首部行的Date字段*/
     std::string header_lines;
-    if(headers_values_["Connection"] == "keep-alive")        //keep-alive字段
+    std::time_t t = std::time(nullptr);
+    auto time = std::ctime(&t);
+    header_lines += "Date: " + std::string(time) + " GMT\r\n";  
+    /*首部行的Server字段*/
+    header_lines += "Server: Hollow-Dai\r\n";
+    /*首部行的Connection字段*/
+    if(headers_values_["Connection"] == "keep-alive")           
     {
         keep_alive_ = true;
         header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
@@ -347,26 +355,70 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
         keep_alive_ = false;
         header_lines +="Connection: close\r\n";
     }
-    std::string::size_type pos_dot = filename_.find('.');
-    std::string file_type = pos_dot == std::string::npos ?
-                            MimeType::GetMime("default") :  MimeType::GetMime(filename_.substr(pos_dot));  //文件类型
 
-    //echo test
+    /*echo test*/
     if(filename_ == "hello")
     {
-        header_lines += "Content-type: text/plain\r\n\r\nHello World";
+        write_out_buffer_ = status_line + header_lines + "Content-type: text/plain\r\n" + "\r\n" + "Hello World";
         return RequestMsgAnalysisState::kAnalysisSuccess;
     }
     else if(filename_ == "favicon.ico")
     {
         header_lines += "Content-Type: image/png\r\n";
-        header_lines += "Content-Length: " + std::to_string(strlen(GlobalVar::favicon));
+        header_lines += "Content-Length: " + std::to_string(strlen(GlobalVar::favicon)) + "\r\n";
+        write_out_buffer_ = status_line + header_lines + "\r\n" + std::string(GlobalVar::favicon);
+        return RequestMsgAnalysisState::kAnalysisSuccess;
     }
 
+    /*首部行的Content-Type字段*/
+    std::string::size_type pos_dot = filename_.find('.');
+    std::string file_type = (pos_dot == std::string::npos ?
+                            MimeType::GetMime("default") : MimeType::GetMime(filename_.substr(pos_dot)));  //文件类型
+
+    header_lines += "Content-Type: " + file_type + "\r\n";
+    /*首部行的Content-Length字段*/
+    int fd = p_connfd_channel_->GetFd();
+    struct stat file{};
+    if(stat(filename_.c_str(),&file) < 0)
+    {
+        ErrorHandler(fd,404,"Not Found!");
+        return RequestMsgAnalysisState::kAnalysisError;
+    }
+    header_lines += "Content-Length: " + std::to_string(file.st_size) + "\r\n";
+    /*首部行结束*/
+
+    if(http_method_ == HttpMethod::kHead)
+    {
+        write_out_buffer_ = status_line + header_lines + "\r\n";
+        return RequestMsgAnalysisState::kAnalysisSuccess;          //HEAD方法不需要实体
+    }
+    
+    /*打开并读取文件，然后填充报文实体*/
+    int file_fd = open(filename_.c_str(),O_RDONLY,0);
+    if(file_fd < 0)
+    {
+        ErrorHandler(fd,404,"Not Found!");
+        return RequestMsgAnalysisState::kAnalysisError;
+    }
+    /*读取文件*/
+    void* mmap_ret = mmap(nullptr,file.st_size,PROT_READ,MAP_PRIVATE,file_fd,0);  //使用mmap避免拷贝
+    close(file_fd);
+    if(mmap_ret == (void*)-1) //读取文件出错
+    {
+        munmap(mmap_ret,file.st_size);
+        ErrorHandler(fd,404,"Not Found!");
+        return RequestMsgAnalysisState::kAnalysisError;
+    }
+    char* file_buffer = static_cast<char*>(mmap_ret);
+    write_out_buffer_ = status_line + header_lines + "\r\n" + std::string(file_buffer,file_buffer + file.st_size);
+    munmap(mmap_ret,file.st_size);
+    return RequestMsgAnalysisState::kAnalysisSuccess;
 }
 
 RequestMsgAnalysisState HttpData::ProcessPOST()
 {
+    /*POST方法用于客户端向服务端提交数据。这里没有前端和数据库，默认发送的是text,直接打印*/
+    
 
 }
 void HttpData::MutexRegInOrOut(bool epollin)
