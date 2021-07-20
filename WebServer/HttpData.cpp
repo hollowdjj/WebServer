@@ -76,7 +76,7 @@ void HttpData::ReadHandler()
                         return;
                     case RequestLineParseState::kParseSuccess:              //成功解析了请求行
                         request_msg_parse_state_ = RequestMsgParseState::kRequestLineOK;
-                        break;
+                        break;                 //此时read_in_buffer_为：\r\n首部行 + 空行 + 实体
                 }
             }break;
             /*State2: 解析请求报文的首部行*/
@@ -90,7 +90,7 @@ void HttpData::ReadHandler()
                         return;
                     case HeaderLinesParseState::kParseSuccess:              //成功解析了首部行
                         request_msg_parse_state_ = RequestMsgParseState::kHeaderLinesOK;
-                        break;
+                        break;                //此时read_in_buffer_为：空行 + 实体(字节数应为Content-length + 2)
                 }
             }break;
             /*State3: 对于POST请求，服务端要检查请求报文中的实体数据是否完整，而GET和HEAD则不用*/
@@ -102,9 +102,9 @@ void HttpData::ReadHandler()
             }break;
             /*State4: 查询实体数据大小并判断实体数据是否全部读到了*/
             case RequestMsgParseState::kCheckBody:{
-                if(headers_values_.find("Content-Length") != headers_values_.end())
+                if(fields_values_.find("Content-Length") != fields_values_.end())
                 {
-                    int content_length = std::stoi(headers_values_["Content-Length"]);
+                    int content_length = std::stoi(fields_values_["Content-Length"]);
                     if(content_length + 2 != read_in_buffer_.size()) return;     //请求报文数据未全部接收，返回，等待数据到来
                 }
                 else
@@ -126,12 +126,13 @@ void HttpData::ReadHandler()
                         break;
                 }
             }break;
-            /*State6: 请求报文全部解析完成，结束while循环*/
+            /*State6: 请求报文全部解析完成，分析并写好了响应报文。结束while循环并向客户端发送响应报文*/
             case RequestMsgParseState::kFinish:
                 finish = true;
                 break;
         }
     }
+    WriteHandler();
 }
 
 void HttpData::WriteHandler()
@@ -216,7 +217,7 @@ RequestLineParseState HttpData::ParseRequestLine()
 {
     /*!
         Http请求报文的请求行的格式为：
-        请求方法|空格|URL|空格|协议版本|回车符|换行符。其中URL以‘/’开始。例如：
+        请求方法|空格|URI|空格|协议版本|回车符|换行符。其中URI以‘/’开始。例如：
         GET /index.html HTTP/1.1\r\n
      */
 
@@ -248,12 +249,12 @@ RequestLineParseState HttpData::ParseRequestLine()
     }
     else return RequestLineParseState::kParseError;
 
-    /*解析URL*/
+    /*解析URI*/
     decltype(pos_method) pos_space,pos_slash,pos_http;
     if((pos_space = request_line.find(' ')) == std::string::npos
        || pos_space != method.size()                                //方法字段后必须有个空格
        || (pos_slash = request_line.find('/',pos_space)) == std::string::npos
-       || pos_slash != pos_space + 1                                //URL必须紧接着方法字段后面的那个空格且以斜杠开头
+       || pos_slash != pos_space + 1                                //URI必须紧接着方法字段后面的那个空格且以斜杠开头
        || (pos_http = request_line.rfind("HTTP/",pos)) == std::string::npos
        || pos_http + 8 != pos)                                      //HTTP字段必须满足HTTP/0.0\r\n的格式
     {
@@ -278,6 +279,7 @@ HeaderLinesParseState HttpData::ParseHeaderLines()
     /*!
         只检查每一行的格式。首部行的格式必须为"字段名：|空格|字段值|cr|lf"
         对首部字段是否正确，字段值是否正确均不做判断。
+        此时，read_in_buffer_为：\r\n首部行 + 空行 + 实体
      */
     auto FormatCheck = [this](std::string& target) -> bool
     {
@@ -289,33 +291,30 @@ HeaderLinesParseState HttpData::ParseHeaderLines()
             return false;
 
         /*保存首部字段和对应的值*/
-        std::string header = target.substr(0,pos_colon);
+        std::string field = target.substr(0, pos_colon);
         std::string value = target.substr(pos_colon+2,target.size()-1-pos_colon-2+1);
-        headers_values_[header] = value;
+        fields_values_[field] = value;
         return true;
     };
 
     /*判断每个首部行的格式是否正确*/
     decltype(read_in_buffer_.size()) pos_cr = 0,old_pos = 0;
-    while(pos_cr != std::string::npos)
+    while(true)
     {
         old_pos = pos_cr;
-        //接收到完整的首部行才开始解析
-        if((pos_cr = read_in_buffer_.find("\r\n",pos_cr + 2)) == std::string::npos) break;
-        if(pos_cr == old_pos + 2)
+        pos_cr = read_in_buffer_.find("\r\n",pos_cr + 2);
+        if(pos_cr == std::string::npos) return HeaderLinesParseState::kParseAgain;   //接收到完整的首部行后才开始解析
+        else if(pos_cr == old_pos + 2)
         {
-            //解析到空行了，则说明首部行格式没问题且数据完整。此时清除已解析的header
+            //解析到首部行和实体之间的空行了，则说明首部行格式没问题且数据完整。此时清除已解析的header(保留空行和实体)
             read_in_buffer_ = read_in_buffer_.substr(pos_cr);
-            return HeaderLinesParseState::kParseSuccess;
+            break;
         }
-
-        std::string header_line = read_in_buffer_.substr(old_pos+2,pos_cr-old_pos-2);
+        std::string header_line = read_in_buffer_.substr(old_pos+2,pos_cr-old_pos-2); //检查首部行格式
         if(!FormatCheck(header_line)) return HeaderLinesParseState::kParseError;
-    } //跳出循环时，old_pos为最后一个完整首部行\r的索引或者0
+    }//跳出循环时，old_pos为最后一个完整首部行\r的索引，pos_cr为空行\r\n的索引
 
-    /*没有解析到空行，且目前已解析了的首部行格式均正确，说明请求报文中的后续数据还在传输中*/
-    read_in_buffer_ = read_in_buffer_.substr(old_pos);  //清除已经解析了的完整首部行
-    return HeaderLinesParseState::kParseAgain;
+    return HeaderLinesParseState::kParseSuccess;
 }
 
 RequestMsgAnalysisState HttpData::AnalysisRequest()
@@ -325,48 +324,20 @@ RequestMsgAnalysisState HttpData::AnalysisRequest()
 
 RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
 {
-    /*!
-        HEAD方法与GET方法一样，只是不返回报文主体部分。
-        一般用来确认URI的有效性以及资源更新的日期时间等。
-     */
-
-    /*状态行*/
-    std::string version;
-    if(http_version_ == HttpVersion::kHttp10)      version = "HTTP/1.0";
-    else if(http_version_ == HttpVersion::kHttp11) version = "HTTP/1.1";
-    std::string status_line = version + " 200 OK\r\n";
-
-    /*首部行的Date字段*/
-    std::string header_lines;
-    std::time_t t = std::time(nullptr);
-    auto time = std::ctime(&t);
-    header_lines += "Date: " + std::string(time) + " GMT\r\n";  
-    /*首部行的Server字段*/
-    header_lines += "Server: Hollow-Dai\r\n";
-    /*首部行的Connection字段*/
-    if(headers_values_["Connection"] == "keep-alive")           
-    {
-        keep_alive_ = true;
-        header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
-                + std::to_string(GlobalVar::keep_alive_timeout.count()) + "\r\n";
-    }
-    else
-    {
-        keep_alive_ = false;
-        header_lines +="Connection: close\r\n";
-    }
+    /*HEAD方法与GET方法一样，只是不返回报文主体部分。一般用来确认URI的有效性以及资源更新的日期时间等。*/
+    FillPartOfResponseMsg();  //编写响应报文中和请求报文中的方法字段无关的内容
 
     /*echo test*/
     if(filename_ == "hello")
     {
-        write_out_buffer_ = status_line + header_lines + "Content-type: text/plain\r\n" + "\r\n" + "Hello World";
+        write_out_buffer_ += std::string("Content-type: text/plain\r\n") + "\r\n" + "Hello World";
         return RequestMsgAnalysisState::kAnalysisSuccess;
     }
     else if(filename_ == "favicon.ico")
     {
-        header_lines += "Content-Type: image/png\r\n";
-        header_lines += "Content-Length: " + std::to_string(strlen(GlobalVar::favicon)) + "\r\n";
-        write_out_buffer_ = status_line + header_lines + "\r\n" + std::string(GlobalVar::favicon);
+        write_out_buffer_ += "Content-Type: image/png\r\n";
+        write_out_buffer_ += "Content-Length: " + std::to_string(strlen(GlobalVar::favicon)) + "\r\n";
+        write_out_buffer_ += "\r\n" + std::string(GlobalVar::favicon);
         return RequestMsgAnalysisState::kAnalysisSuccess;
     }
 
@@ -375,7 +346,7 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     std::string file_type = (pos_dot == std::string::npos ?
                             MimeType::GetMime("default") : MimeType::GetMime(filename_.substr(pos_dot)));  //文件类型
 
-    header_lines += "Content-Type: " + file_type + "\r\n";
+    write_out_buffer_ += "Content-Type: " + file_type + "\r\n";
     /*首部行的Content-Length字段*/
     int fd = p_connfd_channel_->GetFd();
     struct stat file{};
@@ -384,16 +355,17 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
         ErrorHandler(fd,404,"Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
     }
-    header_lines += "Content-Length: " + std::to_string(file.st_size) + "\r\n";
+    write_out_buffer_ += "Content-Length: " + std::to_string(file.st_size) + "\r\n";
     /*首部行结束*/
 
+    /*HEAD方法不需要实体*/
     if(http_method_ == HttpMethod::kHead)
     {
-        write_out_buffer_ = status_line + header_lines + "\r\n";
-        return RequestMsgAnalysisState::kAnalysisSuccess;          //HEAD方法不需要实体
+        write_out_buffer_ += "\r\n";
+        return RequestMsgAnalysisState::kAnalysisSuccess;
     }
     
-    /*打开并读取文件，然后填充报文实体*/
+    /*对GET方法，打开并读取文件，然后填充报文实体*/
     int file_fd = open(filename_.c_str(),O_RDONLY,0);
     if(file_fd < 0)
     {
@@ -410,17 +382,29 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
         return RequestMsgAnalysisState::kAnalysisError;
     }
     char* file_buffer = static_cast<char*>(mmap_ret);
-    write_out_buffer_ = status_line + header_lines + "\r\n" + std::string(file_buffer,file_buffer + file.st_size);
+    write_out_buffer_ += "\r\n" + std::string(file_buffer,file_buffer + file.st_size);
     munmap(mmap_ret,file.st_size);
     return RequestMsgAnalysisState::kAnalysisSuccess;
 }
 
 RequestMsgAnalysisState HttpData::ProcessPOST()
 {
-    /*POST方法用于客户端向服务端提交数据。这里没有前端和数据库，默认发送的是text,直接打印*/
-    
+    /*!
+        POST方法用于客户端向服务端提交数据。这里简单将请求报文实体中的字符串
+        全部转换成大写，然后发送回客户端。
+     */
+     auto body = read_in_buffer_.substr(2);
+     for (auto& item : body)
+     {
+         item = static_cast<char>(std::toupper(static_cast<unsigned char>(item)));
+     }
+     FillPartOfResponseMsg();
+     write_out_buffer_ += std::string("Content-Type: text/plain\r\n") + "Content-Length: " + std::to_string(body.size()) + "\r\n";
+     write_out_buffer_ += "\r\n" + body;
 
+     return RequestMsgAnalysisState::kAnalysisSuccess;
 }
+
 void HttpData::MutexRegInOrOut(bool epollin)
 {
     /*epollin为true时，表示注册EPOLLIN而不注册EPOLLOUT，反之。*/
@@ -436,13 +420,43 @@ void HttpData::Reset()
     read_in_buffer_.clear();
     write_out_buffer_.clear();
     filename_.clear();
-    headers_values_.clear();
+    fields_values_.clear();
     request_msg_parse_state_ = RequestMsgParseState::kStart;
     http_method_ = HttpMethod::kEmpty;
     http_version_ = HttpVersion::kEmpty;
     p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 }
 
+void HttpData::FillPartOfResponseMsg()
+{
+    /*状态行*/
+    std::string version;
+    if(http_version_ == HttpVersion::kHttp10)      version = "HTTP/1.0";
+    else if(http_version_ == HttpVersion::kHttp11) version = "HTTP/1.1";
+    std::string status_line = version + " 200 OK\r\n";
+
+    /*首部行的Date字段*/
+    std::string header_lines;
+    std::time_t t = std::time(nullptr);
+    auto time = std::ctime(&t);
+    header_lines += "Date: " + std::string(time) + " GMT\r\n";
+    /*首部行的Server字段*/
+    header_lines += "Server: Hollow-Dai\r\n";
+    /*首部行的Connection字段*/
+    if(fields_values_["Connection"] == "keep-alive")
+    {
+        //keep_alive_ = true;
+        header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
+                        + std::to_string(GlobalVar::keep_alive_timeout.count()) + "\r\n";
+    }
+    else
+    {
+        //keep_alive_ = false;
+        header_lines +="Connection: close\r\n";
+    }
+
+    write_out_buffer_ = status_line + header_lines;
+}
 /*-----------------------MimeType类-------------------------*/
 std::unordered_map<std::string,std::string> MimeType::mime_{};
 std::once_flag MimeType::flag_{};

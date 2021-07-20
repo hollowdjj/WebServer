@@ -85,12 +85,11 @@ private:
     EventLoop* p_sub_reactor_;                                      //connfd_channel_属于的SubReactor
     Timer* p_timer_{};                                              //挂靠的定时器
 
-
     std::string read_in_buffer_{};                                    //读取的Http响应报文
     std::string write_out_buffer_{};                                  //http响应报文
     std::string filename_{};                                          //客户端请求的资源文件名
-    bool keep_alive_ = false;                                         //true表示长连接，false表示短连接
-    std::map<std::string,std::string> headers_values_{};              //首部字段与其对应的值
+    //bool keep_alive_ = false;                                         //true表示长连接，false表示短连接
+    std::map<std::string,std::string> fields_values_{};              //首部字段与其对应的值
 
     RequestMsgParseState request_msg_parse_state_;                  //表示请求报文的解析状态
     HttpMethod http_method_;                                        //表示为GET POST还是HEAD
@@ -125,6 +124,7 @@ private:
     /*工具函数*/
     void MutexRegInOrOut(bool epollin);                             //对于连接soket，同时只能注册EPOLLIN，EPOLLOUT其中之一
     void Reset();                                                   //还原
+    void FillPartOfResponseMsg();                                   //编写响应报文中和请求报文中的方法字段无关的内容
 };
 
 /*！
