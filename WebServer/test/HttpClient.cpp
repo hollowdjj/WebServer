@@ -16,14 +16,16 @@
 
 /*！
 @Author: DJJ
-@Description: 服务器测试代码。由于实在同一台主机上测试，使用阻塞connect即可
+@Description: 服务器测试代码。由于是在同一台主机上测试，使用阻塞connect即可
+
+  这里只是简单测试一下服务端GET HEAD和POST方法有无明显的bug，并发测试使用webench完成。
 @Date: 2021/6/18 上午11:13
 */
 
-int NonBlockConnect(const char* ip,int port)
+int CreatTcpConn(const char* ip, int port)
 {
     /*创建服务器监听socket的地址*/
-    sockaddr_in server_addr;
+    sockaddr_in server_addr{};
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
     inet_pton(AF_INET,ip,&server_addr.sin_addr);
@@ -34,14 +36,17 @@ int NonBlockConnect(const char* ip,int port)
     int ret = connect(sockfd,reinterpret_cast<sockaddr*>(&server_addr),sizeof server_addr);
     if(ret == 0)
     {
-        /*连接成功建立，返回*/
+        /*成功建立tcp连接*/
         printf("connection established through socket %d\n",sockfd);
         return sockfd;
     }
-
-    printf("connection failed: %s\n", strerror(errno));
-    return -1;
+    else
+    {
+        printf("connection failed: %s\n", strerror(errno));
+        return -1;
+    }
 }
+
 int main(int argc,char* argv[])
 {
     if(argc <=2)
@@ -52,21 +57,33 @@ int main(int argc,char* argv[])
     const char* ip = argv[1];
     int port = atoi(argv[2]);
 
+    std::string get;
+    get += "GET /test.txt HTTP/1.1\r\n";
+    get += "Connection: keep-alive\r\n";
+    std::string post; std::string body = "abcdefg";
+    post += "POST / HTTP/1.1\r\n";
+    post += "Connection: keep-alive\r\n";
+    post += "Content-Type: text/plain\r\n";
+    post += "Content-Length: " + std::to_string(body.size());
+    post +="\r\n";
+    post += body;
+
     int conn_num = 0;
     while(true)
     {
         if(conn_num >=5) continue;
 
-        int temp = NonBlockConnect(ip,port);
+        int sockfd = CreatTcpConn(ip, port);
         sleep(0.5);
-        if(temp > 0)
+        if(sockfd > 0)
         {
-            const char* buf = "hello motherfucker!";
-            std::cout<<"total "<<strlen(buf)<<" bytes"<<std::endl;
-            int res = send(temp,buf,strlen(buf),0);
+            auto buf = post.c_str();
+            std::cout<<"total "<<get.size()<<" bytes"<<std::endl;
+            ssize_t res = send(sockfd, buf, strlen(buf), 0);
             std::cout<<"send "<<res<<" bytes"<<std::endl;
             ++conn_num;
         }
+        break;
     }
     return 0;
 }

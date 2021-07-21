@@ -78,23 +78,21 @@ class EventLoop;
 class Channel;
 class Timer;
 
-//TODO 引入HTTP
 class HttpData {
 private:
     Channel* p_connfd_channel_;                                     //连接socket对应的Channel对象的智能指针
     EventLoop* p_sub_reactor_;                                      //connfd_channel_属于的SubReactor
     Timer* p_timer_{};                                              //挂靠的定时器
 
-    std::string read_in_buffer_{};                                    //读取的Http响应报文
+    std::string read_in_buffer_{};                                    //http请求报文
     std::string write_out_buffer_{};                                  //http响应报文
     std::string filename_{};                                          //客户端请求的资源文件名
-    //bool keep_alive_ = false;                                         //true表示长连接，false表示短连接
-    std::map<std::string,std::string> fields_values_{};              //首部字段与其对应的值
+    bool keep_alive_ = false;                                         //true为长连接，false为短连接
+    std::map<std::string,std::string> fields_values_{};               //请求报文首部字段与其对应的值
+    HttpMethod http_method_;                                          //表示为GET POST还是HEAD
+    HttpVersion http_version_;                                        //http协议版本号
 
-    RequestMsgParseState request_msg_parse_state_;                  //表示请求报文的解析状态
-    HttpMethod http_method_;                                        //表示为GET POST还是HEAD
-    HttpVersion http_version_;                                      //http协议版本号
-
+    RequestMsgParseState request_msg_parse_state_;                    //表示请求报文的解析状态
     std::map<HttpMethod,std::function<RequestMsgAnalysisState()>> method_proc_func_;  //请求报文中方法字段与业务处理函数的映射
 public:
     HttpData() = default;
@@ -109,7 +107,9 @@ private:
     void WriteHandler();                                            //向连接socket写数据
     void DisConndHandler();                                         //连接socket断开连接
     void ExpiredHandler();                                          //连接socket的超时处理
-    void ErrorHandler(int fd,int error_num,std::string msg);        //错误处理
+    void ErrorHandler();                                            //连接socket EPOLLERR事件的回调函数
+
+    void SendErrorMsg(int fd, int error_num, std::string msg);        //错误处理
 
     /*解析http数据的函数*/
     RequestLineParseState ParseRequestLine();                       //解析http请求报文的请求行，判断是否有语法错误
@@ -120,7 +120,6 @@ private:
     RequestMsgAnalysisState ProcessGETorHEAD();
     RequestMsgAnalysisState ProcessPOST();
 
-    
     /*工具函数*/
     void MutexRegInOrOut(bool epollin);                             //对于连接soket，同时只能注册EPOLLIN，EPOLLOUT其中之一
     void Reset();                                                   //还原

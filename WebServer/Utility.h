@@ -27,12 +27,12 @@
 @Description: 定义工具函数以及工具类
 @Date: 2021/6/13 上午10:32
 */
-//TODO 设置两种超时时间 一是等待请求报文到来的超时时间 二是长连接的超时时间
+
 /*全局变量结构体*/
 struct GlobalVar{
     static const int kMaxUserNum = 100000;                              //最大并发连接数量
     static std::chrono::seconds slot_interval;                          //时间轮的槽间隔
-    static std::chrono::seconds timer_timeout ;                         //timer的超时时间
+    static std::chrono::seconds default_timeout ;                       //tcp连接建立后，等待请求报文的超时时间
     static std::chrono::seconds keep_alive_timeout;                     //长连接的超时时间
     static int slot_num;                                                //时间轮的槽数
     static char favicon[555];
@@ -42,12 +42,14 @@ struct GlobalVar{
 @brief 将文件描述符fd设置为非阻塞模式
 */
 int SetNonBlocking(int fd);
-
 /*!
 @brief 绑定端口号并监听。成功时返回监听socket的文件描述符，否则返回-1
 */
 int BindAndListen(int port);
-
+/*!
+@brief 返回GMT时间
+*/
+std::string GetTime();
 /*!
 @brief ET模式下从文件描述符(非socket)读n个字节的数据
 

@@ -28,7 +28,7 @@ EventLoop::~EventLoop()
     close(epollfd_);
 }
 
-bool EventLoop::AddEpollEvent(Channel* event_channel)
+bool EventLoop::AddEpollEvent(Channel* event_channel, std::chrono::seconds timeout)
 {
     /*每一个连接socket都必须设置一个表示HttpData对象的holder*/
     if(!event_channel || (event_channel->IsConnfd() && event_channel->GetHolder()== nullptr)) return false;
@@ -51,7 +51,7 @@ bool EventLoop::AddEpollEvent(Channel* event_channel)
     {
         /*有holder的连接socket才需要将holder保存在事件池中并设置timer。监听socket以及tickfd均不用设置*/
         http_data_pool_[event.data.fd] = std::unique_ptr<HttpData>(event_channel->GetHolder());
-        auto p_timer = timewheel_.AddTimer(GlobalVar::timer_timeout); //延时设置为5s
+        auto p_timer = timewheel_.AddTimer(timeout);              //设置timer
         event_channel->GetHolder()->LinkTimer(p_timer);
         /*连接数加1*/
         {
@@ -65,19 +65,23 @@ bool EventLoop::AddEpollEvent(Channel* event_channel)
     return true;
 }
 
-bool EventLoop::ModEpollEvent(Channel* event_channel)
+bool EventLoop::ModEpollEvent(Channel* event_channel, std::chrono::seconds timeout)
 {
     if(!event_channel) return false;
-
+    /*修改timer的超时时间*/
+    timewheel_.AdjustTimer(event_channel->GetHolder()->GetTimer(),timeout);
+    /*修改注册的事件*/
     int fd = event_channel->GetFd();
-    epoll_event event;
-    event.data.fd = fd;
-    event.events |= (event_channel->GetEvents() | EPOLLET);
-
-    if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&event) < 0)
+    if(!event_channel->EqualAndUpdateLastEvents())
     {
-        printf("epoll mod error: %s\n", strerror(errno));
-        return false;
+        epoll_event event{};
+        event.data.fd = fd;
+        event.events = (event_channel->GetEvents() | EPOLLET);
+        if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&event) < 0)
+        {
+            printf("epoll mod error: %s\n", strerror(errno));
+            return false;
+        }
     }
 
     return true;

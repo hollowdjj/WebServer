@@ -5,7 +5,7 @@
 //   Global    Variables //
 ///////////////////////////
 std::chrono::seconds GlobalVar::slot_interval = std::chrono::seconds(1);        /* NOLINT */
-std::chrono::seconds GlobalVar::timer_timeout = std::chrono::seconds(5);        /* NOLINT */
+std::chrono::seconds GlobalVar::default_timeout = std::chrono::seconds(15);     /* NOLINT */
 std::chrono::seconds GlobalVar::keep_alive_timeout = std::chrono::seconds(60);  /* NOLINT */
 int GlobalVar::slot_num = 60;
 const int kMaxBufferSize = 4096;
@@ -73,6 +73,7 @@ char GlobalVar::favicon[555] = {
         'v',    '\x98', 'I',    '\x0',  '\x0',  '\x0',  '\x0',  'I',    'E',
         'N',    'D',    '\xAE', 'B',    '\x60', '\x82',
 };
+
 int SetNonBlocking(int fd)
 {
     int old_option = fcntl(fd,F_GETFL);
@@ -130,6 +131,17 @@ int BindAndListen(int port)
     }
 
     return listenfd;
+}
+
+std::string GetTime()
+{
+    time_t raw_time;
+    struct tm* time_info;
+    char time_buffer[30]{};
+    time(&raw_time);
+    time_info = gmtime(&raw_time);
+    strftime(time_buffer, sizeof(time_buffer), "%a, %d %b %Y %H:%M:%S GMT", time_info);
+    return std::string(time_buffer);
 }
 
 ssize_t ReadData(int fd, char* dest, size_t n)

@@ -35,6 +35,7 @@ private:
     bool is_connfd_;               //表示fd_是否为连接socket
     __uint32_t events_{};          //文件描述符fd_需要监听的事件
     __uint32_t revents_{};         //events_中的就绪事件
+    __uint32_t last_events_{};     //修改之前注册的事件
 
     using CallBack = std::function<void()>;
     CallBack ReadHandler_;         //读数据的回调函数
@@ -74,6 +75,9 @@ public:
 
     /*根据revents_调用相应的回调函数*/
     void CallReventsHandlers();
+    
+    /*判断channel的事件是否修改过并更新last_events*/
+    bool EqualAndUpdateLastEvents();
 private:
     /*回调函数的调用*/
     void CallReadHandler()

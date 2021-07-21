@@ -28,3 +28,10 @@ void Channel::CallReventsHandlers()
     else if(revents_ & EPOLLOUT) CallWriteHandler();
     else if(revents_ & (EPOLLIN | EPOLLRDHUP))  CallReadHandler();
 }
+
+bool Channel::EqualAndUpdateLastEvents()
+{
+    bool ret = (events_ == last_events_);
+    last_events_ = events_;
+    return ret;
+}

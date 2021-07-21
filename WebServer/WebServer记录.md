@@ -40,3 +40,5 @@ epoll_wait如何停止？
 
 请求报文和响应报文中的http版本号需要一致吗
 
+为什么epoll修改注册的事件时，采取取反的方式会导致invalid argument
+

@@ -7,7 +7,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 /*-----------------------HttpData类-------------------------*/
-
+//TODO 再理一下AdjustTimer的调用时机
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
                         :p_sub_reactor_(sub_reactor),
                          p_connfd_channel_(connfd_channel),
@@ -20,6 +20,7 @@ HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
         /*设置回调函数*/
         p_connfd_channel_->SetReadHandler([this](){ReadHandler();});
         p_connfd_channel_->SetWriteHandler([this](){WriteHandler();});
+        p_connfd_channel_->SetErrorHandler([this](){ErrorHandler();});
     }
     /*填充请求报文中方法字段与相应业务处理函数的映射*/
     method_proc_func_[HttpMethod::kGet]  = [this](){return ProcessGETorHEAD();};
@@ -46,7 +47,7 @@ void HttpData::LinkTimer(Timer* p_timer)
 void HttpData::ReadHandler()
 {
     /*调整定时器以延迟该连接被关闭的时间*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::default_timeout);
 
     /*从连接socket读取数据*/
     int fd = p_connfd_channel_->GetFd();
@@ -72,7 +73,7 @@ void HttpData::ReadHandler()
                     case RequestLineParseState::kParseAgain:                //未接收到完整的请求行，返回，等待下一波数据的到来
                         return;
                     case RequestLineParseState::kParseError:                //请求行语法错误，向客户端发送错误代码400并重置
-                        ErrorHandler(fd, 400, "Bad Request: Request line has syntax error");
+                        SendErrorMsg(fd, 400, "Bad Request: Request line has syntax error");
                         return;
                     case RequestLineParseState::kParseSuccess:              //成功解析了请求行
                         request_msg_parse_state_ = RequestMsgParseState::kRequestLineOK;
@@ -86,7 +87,7 @@ void HttpData::ReadHandler()
                     case HeaderLinesParseState::kParseAgain:                //首部行数据不完整，返回，等待下一波数据到来
                         return;
                     case HeaderLinesParseState::kParseError:                //首部行语法错误，向客户端发送错误代码400并重置
-                        ErrorHandler(fd,400,"Bad Request: Header lines have syntax error");
+                        SendErrorMsg(fd, 400, "Bad Request: Header lines have syntax error");
                         return;
                     case HeaderLinesParseState::kParseSuccess:              //成功解析了首部行
                         request_msg_parse_state_ = RequestMsgParseState::kHeaderLinesOK;
@@ -110,7 +111,7 @@ void HttpData::ReadHandler()
                 else
                 {
                     //请求报文首部行中有语法错误，发送错误代码和信息并重置
-                    ErrorHandler(fd,400,"Bad Request: Lack of argument (Content-Length)");
+                    SendErrorMsg(fd, 400, "Bad Request: Lack of argument (Content-Length)");
                     return;
                 }
                 request_msg_parse_state_ = RequestMsgParseState::kAnalysisRequest;
@@ -138,7 +139,7 @@ void HttpData::ReadHandler()
 void HttpData::WriteHandler()
 {
     /*调整定时器以延迟该连接被关闭的时间*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::default_timeout);
 
     /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
     MutexRegInOrOut(false);
@@ -168,10 +169,15 @@ void HttpData::DisConndHandler()
     p_sub_reactor_->DelEpollEvent(p_connfd_channel_);
 }
 
-void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
+void HttpData::ErrorHandler()
+{
+    printf("get an error form connect socket: %s\n", strerror(errno));
+}
+
+void HttpData::SendErrorMsg(int fd, int error_num, std::string msg)
 {
     /*调整定时器以延迟该连接被关闭的时间*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
+    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::default_timeout);
 
     /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
     MutexRegInOrOut(false);
@@ -185,10 +191,8 @@ void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
 
     /*编写响应报文的header*/
     std::string response_header;
-    std::time_t t = std::time(nullptr);
-    auto time = std::ctime(&t);
-    response_header += "HTTP/1.1 " + std::to_string(error_num) + msg + "\r\n";
-    response_header += "Date: " + std::string(time) + " GMT\r\n";
+    response_header += "HTTP/1.1 " + std::to_string(error_num) + " "+ msg + "\r\n";
+    response_header += "Date: " + GetTime() + "\r\n";
     response_header += "Server: Hollow-Dai\r\n";
     response_header += "Content-Type: text/html\r\n";
     response_header += "Connection: close\r\n";
@@ -208,8 +212,8 @@ void HttpData::ErrorHandler(int fd,int error_num,std::string msg)
 
 void HttpData::ExpiredHandler()
 {
-    //TODO 告知客户端已超时
-    printf("client %d is silent for a while, preparing to shut it down\n",p_connfd_channel_->GetFd());
+    printf("client %d timeout, shut it down\n",p_connfd_channel_->GetFd());
+    SendErrorMsg(p_connfd_channel_->GetFd(), 0, "timeout");
     DisConndHandler();
 }
 
@@ -352,7 +356,7 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     struct stat file{};
     if(stat(filename_.c_str(),&file) < 0)
     {
-        ErrorHandler(fd,404,"Not Found!");
+        SendErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
     }
     write_out_buffer_ += "Content-Length: " + std::to_string(file.st_size) + "\r\n";
@@ -369,7 +373,7 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     int file_fd = open(filename_.c_str(),O_RDONLY,0);
     if(file_fd < 0)
     {
-        ErrorHandler(fd,404,"Not Found!");
+        SendErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
     }
     /*读取文件*/
@@ -378,7 +382,7 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     if(mmap_ret == (void*)-1) //读取文件出错
     {
         munmap(mmap_ret,file.st_size);
-        ErrorHandler(fd,404,"Not Found!");
+        SendErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
     }
     char* file_buffer = static_cast<char*>(mmap_ret);
@@ -407,12 +411,25 @@ RequestMsgAnalysisState HttpData::ProcessPOST()
 
 void HttpData::MutexRegInOrOut(bool epollin)
 {
-    /*epollin为true时，表示注册EPOLLIN而不注册EPOLLOUT，反之。*/
-    __uint32_t old_option = p_connfd_channel_->GetEvents();
-    __uint32_t new_option;
-    if(epollin) new_option = old_option | EPOLLIN | ~EPOLLOUT;
-    else new_option = old_option | ~EPOLLIN | EPOLLOUT;
-    p_connfd_channel_->SetEvents(new_option);
+    /*!
+        epollin为true时，表示注册EPOLLIN而不注册EPOLLOUT，反之。
+        同时，在使用EPOLL_CTL_MOD时，events必须全部重写，不能采
+        用取反然后或等于的形式。比如：
+        __uint32_t old_option = p_connfd_channel_->GetEvents();
+        old_option |= ~EPOLLIN; old_option |= EPOLLOUT
+        p_connfd_channel_->SetEvents(old_option);
+        采取上述这种写法会报invalid argument错误。然而poll是可以这样写的。
+        至于epoll为什么不能，还有待查证。
+     */
+    /**/
+    __uint32_t events;
+    if(epollin) events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
+    else events = EPOLLOUT | EPOLLRDHUP | EPOLLERR;        //
+    p_connfd_channel_->SetEvents(events);
+
+    /*如果是短连接，那么超时时间设为0，下一次tick就会直接断开连接。反之，设置长连接的超时时间*/
+    auto timeout = keep_alive_ ? GlobalVar::keep_alive_timeout : std::chrono::seconds(0);
+    p_sub_reactor_->ModEpollEvent(p_connfd_channel_,timeout);
 }
 
 void HttpData::Reset()
@@ -424,7 +441,6 @@ void HttpData::Reset()
     request_msg_parse_state_ = RequestMsgParseState::kStart;
     http_method_ = HttpMethod::kEmpty;
     http_version_ = HttpVersion::kEmpty;
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::timer_timeout);
 }
 
 void HttpData::FillPartOfResponseMsg()
@@ -437,26 +453,25 @@ void HttpData::FillPartOfResponseMsg()
 
     /*首部行的Date字段*/
     std::string header_lines;
-    std::time_t t = std::time(nullptr);
-    auto time = std::ctime(&t);
-    header_lines += "Date: " + std::string(time) + " GMT\r\n";
+    header_lines += "Date: " + GetTime() + "\r\n";
     /*首部行的Server字段*/
     header_lines += "Server: Hollow-Dai\r\n";
     /*首部行的Connection字段*/
     if(fields_values_["Connection"] == "keep-alive")
     {
-        //keep_alive_ = true;
+        keep_alive_ = true;
         header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
                         + std::to_string(GlobalVar::keep_alive_timeout.count()) + "\r\n";
     }
     else
     {
-        //keep_alive_ = false;
+        keep_alive_ = false;
         header_lines +="Connection: close\r\n";
     }
 
     write_out_buffer_ = status_line + header_lines;
 }
+
 /*-----------------------MimeType类-------------------------*/
 std::unordered_map<std::string,std::string> MimeType::mime_{};
 std::once_flag MimeType::flag_{};
