@@ -11,7 +11,7 @@ Timer::Timer(size_t trigger_cycles, size_t slot_index)
 /*------------------------------TimerManager类----------------------------------*/
 TimeWheel::TimeWheel()
 {
-    slots_.resize(GlobalVar::slot_num);
+    slots_.resize(GlobalVar::slot_num_);
     /*创建一个管道，通过监听tick_fd_[0]可读事件的形式定时让时间轮tick一下*/
     int res = pipe(tick_fd_);
     assert(res != -1);
@@ -102,7 +102,7 @@ void TimeWheel::Tick()
             it = next;
         }
     }
-    current_slot_ = ++current_slot_ % GlobalVar::slot_num;  //指向下一个槽
+    current_slot_ = ++current_slot_ % GlobalVar::slot_num_;  //指向下一个槽
 }
 
 std::optional<std::pair<size_t /*cycle*/, size_t /*index*/>> TimeWheel::CalPosInWheel(std::chrono::seconds timeout)
@@ -117,9 +117,9 @@ std::optional<std::pair<size_t /*cycle*/, size_t /*index*/>> TimeWheel::CalPosIn
         否则向下折合为timeout/slot_interval_。然后，计算计时器的触发圈数以及应放入哪一个槽中。
      */
     size_t ticks = 0;
-    if(timeout < GlobalVar::slot_interval) ticks = 1;
-    else ticks = timeout / GlobalVar::slot_interval;
-    size_t cycle = ticks / GlobalVar::slot_num;                                           //timer将在时间轮转动cycle圈后被触发
-    size_t index = (current_slot_ + (ticks % GlobalVar::slot_num)) % GlobalVar::slot_num; //timer被放置的槽的序号
+    if(timeout < GlobalVar::slot_interval_) ticks = 1;
+    else ticks = timeout / GlobalVar::slot_interval_;
+    size_t cycle = ticks / GlobalVar::slot_num_;                                           //timer将在时间轮转动cycle圈后被触发
+    size_t index = (current_slot_ + (ticks % GlobalVar::slot_num_)) % GlobalVar::slot_num_; //timer被放置的槽的序号
     return std::make_pair(cycle,index);
 }

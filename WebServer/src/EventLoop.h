@@ -46,7 +46,7 @@ public:
     explicit EventLoop(bool is_main_reactor = false);
     ~EventLoop();
 
-    bool AddEpollEvent(Channel* event_channel, std::chrono::seconds timeout = GlobalVar::default_timeout); //添加新的事件
+    bool AddEpollEvent(Channel* event_channel, std::chrono::seconds timeout = GlobalVar::default_timeout_); //添加新的事件
     bool ModEpollEvent(Channel* event_channel, std::chrono::seconds timeout);                              //修改事件和超时时间
     bool DelEpollEvent(Channel* event_channel);                    //删除内核事件表中注册的文件描述符
     void StartLoop();                                              //开始监听事件
@@ -55,7 +55,7 @@ public:
     int GetConnectionNum();                                        //返回连接数量
     [[maybe_unused]]int GetEpollfd(){return epollfd_;}             //返回epoll内核事件表
     int GetTickfd(){return timewheel_.tick_fd_[1];}                //返回tick管道的写端文件描述符
-    void AdjustTimer(Timer* timer,std::chrono::seconds timeout) {timewheel_.AdjustTimer(timer,timeout);}
+    void AdjustTimer(Timer* timer,std::chrono::seconds timeout){timewheel_.AdjustTimer(timer,timeout);}  //重新设置timer超时时间
 private:
     void GetActiveEventsAndProc();                                 //得到就绪事件并执行相应的回调函数
 };

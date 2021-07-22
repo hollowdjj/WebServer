@@ -31,10 +31,12 @@
 /*全局变量结构体*/
 struct GlobalVar{
     static const int kMaxUserNum = 100000;                              //最大并发连接数量
-    static std::chrono::seconds slot_interval;                          //时间轮的槽间隔
-    static std::chrono::seconds default_timeout ;                       //tcp连接建立后，等待请求报文的超时时间
-    static std::chrono::seconds keep_alive_timeout;                     //长连接的超时时间
-    static int slot_num;                                                //时间轮的槽数
+    static std::chrono::seconds slot_interval_;                         //时间轮的槽间隔
+    static std::chrono::seconds default_timeout_ ;                      //tcp连接建立后，等待请求报文的超时时间
+    static std::chrono::seconds client_header_timeout_;                 //必须在该时间内接收到完整的请求行和首部行，否则超时
+    static std::chrono::seconds client_body_timeout_;                   //实体数据两相邻数据包的超时时间
+    static std::chrono::seconds keep_alive_timeout_;                    //长连接的超时时间
+    static int slot_num_;                                               //时间轮的槽数
     static char favicon[555];
 };
 

@@ -38,7 +38,8 @@ void HttpServer::Start()
     {
         /*HttpServer和ThreadPool需要共享SubReactor对象，故这里使用shared_ptr*/
         auto sub_reactor = std::make_shared<EventLoop>();
-        tickfds_.emplace_back(sub_reactor->GetTickfd());     //获取SubReactor的tickfd的写端文件描述符
+        //tickfds_.emplace_back(sub_reactor->GetTickfd());     //获取SubReactor的tickfd的写端文件描述符
+        tickfds_.emplace_back(sub_reactor->GetTickfd());
         p_sub_thread_pool_->AddTaskToPool([=](){sub_reactor->StartLoop();});
         sub_reactors_.emplace_back(sub_reactor);
     }

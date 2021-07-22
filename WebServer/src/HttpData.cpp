@@ -7,7 +7,6 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 /*-----------------------HttpData类-------------------------*/
-//TODO 再理一下AdjustTimer的调用时机
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
                         :p_sub_reactor_(sub_reactor),
                          p_connfd_channel_(connfd_channel),
@@ -46,8 +45,12 @@ void HttpData::LinkTimer(Timer* p_timer)
 
 void HttpData::ReadHandler()
 {
-    /*调整定时器以延迟该连接被关闭的时间*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::default_timeout);
+    /*请求行和首部行必须在client_header_timeout_全部到达，否则超时*/
+    if(request_msg_parse_state_ == RequestMsgParseState::kStart)
+    {
+        if(read_in_buffer_.empty()) 
+            p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::client_header_timeout_);
+    }
 
     /*从连接socket读取数据*/
     int fd = p_connfd_channel_->GetFd();
@@ -103,10 +106,12 @@ void HttpData::ReadHandler()
             }break;
             /*State4: 查询实体数据大小并判断实体数据是否全部读到了*/
             case RequestMsgParseState::kCheckBody:{
+                //body的两相邻报文到达的间隔不能超过client_body_timeout_，否则超时。
+                p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::client_body_timeout_);
                 if(fields_values_.find("Content-Length") != fields_values_.end())
                 {
                     int content_length = std::stoi(fields_values_["Content-Length"]);
-                    if(content_length + 2 != read_in_buffer_.size()) return;     //请求报文数据未全部接收，返回，等待数据到来
+                    if(content_length + 2 != read_in_buffer_.size())  return; //请求报文数据未全部接收，返回。
                 }
                 else
                 {
@@ -122,7 +127,7 @@ void HttpData::ReadHandler()
                 switch (flag) {
                     case RequestMsgAnalysisState::kAnalysisError:       //发生错误，错误代码机信息的发送在业务函数中完成。
                         return;
-                    case RequestMsgAnalysisState::kAnalysisSuccess:     //成功。相应操作，如数据发送也在业务函数中完成。
+                    case RequestMsgAnalysisState::kAnalysisSuccess:     //成功。
                         request_msg_parse_state_ = RequestMsgParseState::kFinish;
                         break;
                 }
@@ -133,14 +138,12 @@ void HttpData::ReadHandler()
                 break;
         }
     }
+    /*发送正常的http响应报文*/
     WriteHandler();
 }
 
 void HttpData::WriteHandler()
 {
-    /*调整定时器以延迟该连接被关闭的时间*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::default_timeout);
-
     /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
     MutexRegInOrOut(false);
 
@@ -160,6 +163,9 @@ void HttpData::WriteHandler()
 
     /*发送完数据后，需删除EPOLLOUT事件并重新注册EPOLLIN事件*/
     MutexRegInOrOut(true);
+
+    /*重置*/
+    Reset();
 }
 
 void HttpData::DisConndHandler()
@@ -176,9 +182,6 @@ void HttpData::ErrorHandler()
 
 void HttpData::SendErrorMsg(int fd, int error_num, std::string msg)
 {
-    /*调整定时器以延迟该连接被关闭的时间*/
-    p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::default_timeout);
-
     /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
     MutexRegInOrOut(false);
 
@@ -212,7 +215,9 @@ void HttpData::SendErrorMsg(int fd, int error_num, std::string msg)
 
 void HttpData::ExpiredHandler()
 {
-    printf("client %d timeout, shut it down\n",p_connfd_channel_->GetFd());
+    int fd = p_connfd_channel_->GetFd();
+    printf("client %d timeout, shut it down\n",fd);
+    SendErrorMsg(fd,408,"Request Time-out");
     DisConndHandler();
 }
 
@@ -422,19 +427,24 @@ void HttpData::MutexRegInOrOut(bool epollin)
      */
     __uint32_t events;
     if(epollin) events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
-    else events = EPOLLOUT | EPOLLRDHUP | EPOLLERR;        //
+    else events = EPOLLOUT | EPOLLRDHUP | EPOLLERR;
     p_connfd_channel_->SetEvents(events);
-
-    /*如果是短连接，那么超时时间设为0，下一次tick就会直接断开连接。反之，设置长连接的超时时间*/
-    auto timeout = keep_alive_ ? GlobalVar::keep_alive_timeout : std::chrono::seconds(0);
-    p_sub_reactor_->ModEpollEvent(p_connfd_channel_,timeout);
 }
 
 void HttpData::Reset()
 {
+    /*重置超时时间*/
+    if(keep_alive_) p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::keep_alive_timeout_);
+    else
+    {
+        DisConndHandler();
+        return;
+    }
+    /*重置连接信息*/
     read_in_buffer_.clear();
     write_out_buffer_.clear();
     filename_.clear();
+    keep_alive_ = false;
     fields_values_.clear();
     request_msg_parse_state_ = RequestMsgParseState::kStart;
     http_method_ = HttpMethod::kEmpty;
@@ -459,7 +469,7 @@ void HttpData::FillPartOfResponseMsg()
     {
         keep_alive_ = true;
         header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
-                        + std::to_string(GlobalVar::keep_alive_timeout.count()) + "\r\n";
+                        + std::to_string(GlobalVar::keep_alive_timeout_.count()) + "\r\n";
     }
     else
     {

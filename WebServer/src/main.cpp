@@ -26,7 +26,7 @@ void AlarmTick(int sig)
 //        assert(WriteData(tick_fd,msg, strlen(msg)!= strlen(msg)));
         //write(tick_fd,reinterpret_cast<char*>(&msg),1);
     }
-    alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval).count());
+    alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval_).count());
 }
 
 int main()
@@ -49,7 +49,7 @@ int main()
     server = CreateHttpServer(port, &main_reactor, &thread_pool);
     /*服务器开始运行*/
     server->Start();
-    alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval).count());
+    alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval_).count());
     main_reactor.StartLoop();
 
     return 0;

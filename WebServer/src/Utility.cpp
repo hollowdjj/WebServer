@@ -4,10 +4,12 @@
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
-std::chrono::seconds GlobalVar::slot_interval = std::chrono::seconds(1);        /* NOLINT */
-std::chrono::seconds GlobalVar::default_timeout = std::chrono::seconds(15);     /* NOLINT */
-std::chrono::seconds GlobalVar::keep_alive_timeout = std::chrono::seconds(60);  /* NOLINT */
-int GlobalVar::slot_num = 60;
+std::chrono::seconds GlobalVar::slot_interval_ = std::chrono::seconds(1);             /* NOLINT */
+std::chrono::seconds GlobalVar::default_timeout_ = std::chrono::seconds(15);          /* NOLINT */
+std::chrono::seconds GlobalVar::client_header_timeout_ = std::chrono::seconds(60);   /* NOLINT */
+std::chrono::seconds GlobalVar::client_body_timeout_ = std::chrono::seconds(60);     /* NOLINT */
+std::chrono::seconds GlobalVar::keep_alive_timeout_ = std::chrono::seconds(60);       /* NOLINT */
+int GlobalVar::slot_num_ = 60;
 const int kMaxBufferSize = 4096;
 char GlobalVar::favicon[555] = {
         '\x89', 'P',    'N',    'G',    '\xD',  '\xA',  '\x1A', '\xA',  '\x0',

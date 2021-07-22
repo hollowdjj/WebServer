@@ -109,8 +109,6 @@ private:
     void ExpiredHandler();                                          //连接socket的超时处理
     void ErrorHandler();                                            //连接socket EPOLLERR事件的回调函数
 
-    void SendErrorMsg(int fd, int error_num, std::string msg);        //错误处理
-
     /*解析http数据的函数*/
     RequestLineParseState ParseRequestLine();                       //解析http请求报文的请求行，判断是否有语法错误
     HeaderLinesParseState ParseHeaderLines();                       //解析http请求报文的首部行，判断是否有语法错误
@@ -121,6 +119,7 @@ private:
     RequestMsgAnalysisState ProcessPOST();
 
     /*工具函数*/
+    void SendErrorMsg(int fd, int error_num, std::string msg);      //发送带错误代码和错误信息的响应报文
     void MutexRegInOrOut(bool epollin);                             //对于连接soket，同时只能注册EPOLLIN，EPOLLOUT其中之一
     void Reset();                                                   //还原
     void FillPartOfResponseMsg();                                   //编写响应报文中和请求报文中的方法字段无关的内容
