@@ -65,11 +65,10 @@ bool EventLoop::AddEpollEvent(Channel* event_channel, std::chrono::seconds timeo
     return true;
 }
 
-bool EventLoop::ModEpollEvent(Channel* event_channel, std::chrono::seconds timeout)
+bool EventLoop::ModEpollEvent(Channel* event_channel)
 {
     if(!event_channel) return false;
-    /*修改timer的超时时间*/
-    timewheel_.AdjustTimer(event_channel->GetHolder()->GetTimer(),timeout);
+
     /*修改注册的事件*/
     int fd = event_channel->GetFd();
     if(!event_channel->EqualAndUpdateLastEvents())

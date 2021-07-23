@@ -38,10 +38,11 @@ private:
     __uint32_t last_events_{};     //修改之前注册的事件
 
     using CallBack = std::function<void()>;
-    CallBack ReadHandler_;         //读数据的回调函数
-    CallBack WriteHandler_;        //写数据的回调函数
-    CallBack ErrorHandler_;        //错误处理的回调函数
+    CallBack ReadHandler_;         //EPOLLIN的回调函数
+    CallBack WriteHandler_;        //EPOLLOUT的回调函数
+    CallBack ErrorHandler_;        //EPOLLERR的回调函数
     CallBack ConnHandler_;         //接受连接的回调函数
+    CallBack DisConnHandler_;      //EPOLLRDHUP的回调函数
 
     HttpData* p_holder_{};           //只有连接socket才需要一个holder，监听socket不需要
 public:
@@ -72,6 +73,7 @@ public:
     void SetWriteHandler(CallBack write_handler)     {WriteHandler_ = std::move(write_handler);}
     void SetErrorHandler(CallBack error_handler)     {ErrorHandler_ = std::move(error_handler);}
     void SetConnHandler(CallBack conn_handler)       {ConnHandler_ = std::move(conn_handler);}
+    void SetDisconnHandler(CallBack disconn_handler) {DisConnHandler_ = std::move(disconn_handler);}
 
     /*根据revents_调用相应的回调函数*/
     void CallReventsHandlers();
@@ -83,22 +85,27 @@ private:
     void CallReadHandler()
     {
         if(ReadHandler_) ReadHandler_();
-        else printf("read handler has not been registered yet!\n");
+        else printf("read handler has not been registered yet\n");
     }
     void CallWriteHandler()
     {
         if(WriteHandler_) WriteHandler_();
-        else printf("write handler has not been registered yet!\n");
+        else printf("write handler has not been registered yet\n");
     }
     void CallErrorHandler()
     {
         if(ErrorHandler_) ErrorHandler_();
-        else printf("error handler has not been registered yet!\n");
+        else printf("error handler has not been registered yet\n");
     }
     void CallConnHandler()
     {
         if(ConnHandler_) ConnHandler_();
-        else printf("connect handler has not been registered yet!\n");
+        else printf("connect handler has not been registered yet\n");
+    }
+    void CallDisconnHandler()
+    {
+        if(DisConnHandler_) DisConnHandler_();
+        else printf("disconnect handler has not been registered yet\n");
     }
 };
 

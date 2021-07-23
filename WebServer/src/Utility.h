@@ -30,13 +30,13 @@
 
 /*全局变量结构体*/
 struct GlobalVar{
-    static const int kMaxUserNum = 100000;                              //最大并发连接数量
-    static std::chrono::seconds slot_interval_;                         //时间轮的槽间隔
-    static std::chrono::seconds default_timeout_ ;                      //tcp连接建立后，等待请求报文的超时时间
-    static std::chrono::seconds client_header_timeout_;                 //必须在该时间内接收到完整的请求行和首部行，否则超时
-    static std::chrono::seconds client_body_timeout_;                   //实体数据两相邻数据包的超时时间
-    static std::chrono::seconds keep_alive_timeout_;                    //长连接的超时时间
-    static int slot_num_;                                               //时间轮的槽数
+    static const int kMaxUserNum = 100000;                    //最大并发连接数量
+    static std::chrono::seconds slot_interval_;               //时间轮的槽间隔
+    static std::chrono::seconds server_process_timeout_;      //服务器处理
+    static std::chrono::seconds client_header_timeout_;       //tcp连接建立后,必须在该时间内接收到完整的请求行和首部行，否则超时
+    static std::chrono::seconds client_body_timeout_;         //实体数据两相邻包到达的间隔时间不能超过该时间，否则超时
+    static std::chrono::seconds keep_alive_timeout_;          //长连接的超时时间
+    static int slot_num_;                                     //时间轮的槽数
     static char favicon[555];
 };
 
@@ -70,7 +70,7 @@ ssize_t ReadData(int fd, char* dest, size_t n);
 @param[in] disconnect   true表示客户端已断开连接，false表示客户端未断开连接
 @return                 成功读取的字节数。-1表示数据读取出错
 */
-ssize_t  ReadData(int fd,std::string& buffer,bool& disconnect);
+ssize_t ReadData(int fd,std::string& buffer,bool& disconnect);
 
 /*!
 @brief ET模式下向文件描述符(非socket)写n个字节的数据
@@ -87,9 +87,9 @@ ssize_t WriteData(int fd, const char* source, size_t n);
 
 @param[in] fd      连接socket的文件描述符
 @param[in] buffer  待写的数据
-@return            成功写出的字节数。-1表示写数据出错。返回0不一定表示buffer的所有数据都写完了
+@return            成功写出的字节数。-1表示写数据出错。返回0不一定表示buffer的数据都写完了
 */
-ssize_t WriteData(int fd,std::string& buffer);
+ssize_t WriteData(int fd, std::string& buffer, bool& full);
 
 /*线程池*/
 class ThreadPool{

@@ -4,11 +4,10 @@
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
-std::chrono::seconds GlobalVar::slot_interval_ = std::chrono::seconds(1);             /* NOLINT */
-std::chrono::seconds GlobalVar::default_timeout_ = std::chrono::seconds(15);          /* NOLINT */
-std::chrono::seconds GlobalVar::client_header_timeout_ = std::chrono::seconds(60);   /* NOLINT */
-std::chrono::seconds GlobalVar::client_body_timeout_ = std::chrono::seconds(60);     /* NOLINT */
-std::chrono::seconds GlobalVar::keep_alive_timeout_ = std::chrono::seconds(60);       /* NOLINT */
+std::chrono::seconds GlobalVar::slot_interval_ = std::chrono::seconds(1);            /* NOLINT */
+std::chrono::seconds GlobalVar::client_header_timeout_ = std::chrono::seconds(30);   /* NOLINT */
+std::chrono::seconds GlobalVar::client_body_timeout_ = std::chrono::seconds(30);     /* NOLINT */
+std::chrono::seconds GlobalVar::keep_alive_timeout_ = std::chrono::seconds(5);      /* NOLINT */
 int GlobalVar::slot_num_ = 60;
 const int kMaxBufferSize = 4096;
 char GlobalVar::favicon[555] = {
@@ -161,7 +160,7 @@ ssize_t ReadData(int fd, char* dest, size_t n)
             else if(errno == EAGAIN) return read_sum;  //当前无数据可读，返回已读取的字节数
             else
             {
-                printf("read data from filefd %d error: %s",fd, strerror(errno));
+                printf("read data from filefd %d error: %s\n",fd, strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
@@ -201,7 +200,7 @@ ssize_t ReadData(int fd,std::string& buffer,bool& disconnect)
             else if(errno == EAGAIN || errno == EWOULDBLOCK) return read_sum; //当前无数据可读
             else
             {
-                printf("read data from socket %d error: %s",fd,strerror(errno));
+                printf("read data from socket %d error: %s\n",fd,strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
@@ -234,7 +233,7 @@ ssize_t WriteData(int fd, const char* source, size_t n)
             else if(errno == EAGAIN) return write_sum;   //客户端或者服务器自身的缓冲区已经写满了，返回
             else
             {
-                printf("write data to filefd %d error: %s",fd, strerror(errno));
+                printf("write data to filefd %d error: %s\n",fd, strerror(errno));
                 return -1;                               //否则表示发生了错误，返回-1
             }
         }
@@ -242,25 +241,40 @@ ssize_t WriteData(int fd, const char* source, size_t n)
         num-=write_once;
         write_sum+=write_once;
     }
+
     return write_sum;
 }
 
-ssize_t WriteData(int fd,std::string& buffer)
+ssize_t WriteData(int fd, std::string& buffer, bool& full)
 {
-    auto num = buffer.size();      //期望写出的字节数
-    ssize_t write_once = 0;        //本次写出的字节数
-    ssize_t write_sum = 0;         //写出的总字节数
-    const char* ptr = buffer.c_str();
+    if(buffer.empty()) return 0;
+
+    full = false;
+    auto num = buffer.size() + 1;      //期望写出的字节数
+    ssize_t write_once = 0;            //本次写出的字节数
+    ssize_t write_sum = 0;             //写出的总字节数
+    const char* ptr = buffer.c_str();  //转换后的字符串结尾多了一个\0，所以length要加一，否则会乱码
     while(num > 0)
     {
         write_once = send(fd, ptr, num, 0);
         if(write_once < 0)
         {
-            if(errno == EINTR) continue;                                      //被系统中断打断时重新再写一次
-            else if(errno == EAGAIN || errno==EWOULDBLOCK)  return write_sum; //客户端或者服务器的缓冲区已经写满了，返回
+
+            if(errno == EINTR) continue;  //被系统中断打断时重新再写一次
+            /*!
+             使用send函数且是非阻塞socket的情况下，一开始不需要注册EPOLLOUT，直接往socket写数据即可。
+             当errno == EAGAIN || errno==EWOULDBLOCK时表示发送缓冲区已经写满了。此时，若数据还没有
+             发送完，就需要注册EPOLLOUT，然后通过回调函数在可以往发送区中继续写数据时发送剩余的数据。
+             数据发送完后，需取消EPOLLOUT并重新注册EPOLLIN。
+             */
+            else if(errno == EAGAIN || errno==EWOULDBLOCK)
+            {
+                full = true;             //发送缓冲区已经写满了，返回
+                return write_sum;
+            }
             else
             {
-                printf("write data to socket %d error: %s",fd, strerror(errno));
+                printf("write data to socket %d error: %s\n",fd, strerror(errno));
                 return -1;                                                    //否则表示发生了错误，返回-1
             }
         }
@@ -269,7 +283,7 @@ ssize_t WriteData(int fd,std::string& buffer)
         ptr+=write_once;
     }
     /*从buffer中删除已经写出的数据*/
-    if(write_sum == buffer.size()) buffer.clear();
+    if(write_sum == buffer.size() + 1) buffer.clear();
     else buffer = buffer.substr(write_sum);
     
     return write_sum;

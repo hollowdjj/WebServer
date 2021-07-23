@@ -1,7 +1,6 @@
 #include "HttpData.h"
 #include "Channel.h"
 #include "EventLoop.h"
-#include <ctime>
 #include <iomanip>
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -20,6 +19,7 @@ HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
         p_connfd_channel_->SetReadHandler([this](){ReadHandler();});
         p_connfd_channel_->SetWriteHandler([this](){WriteHandler();});
         p_connfd_channel_->SetErrorHandler([this](){ErrorHandler();});
+        p_connfd_channel_->SetDisconnHandler([this](){DisConndHandler();});
     }
     /*填充请求报文中方法字段与相应业务处理函数的映射*/
     method_proc_func_[HttpMethod::kGet]  = [this](){return ProcessGETorHEAD();};
@@ -45,19 +45,12 @@ void HttpData::LinkTimer(Timer* p_timer)
 
 void HttpData::ReadHandler()
 {
-    /*请求行和首部行必须在client_header_timeout_全部到达，否则超时*/
-    if(request_msg_parse_state_ == RequestMsgParseState::kStart)
-    {
-        if(read_in_buffer_.empty()) 
-            p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::client_header_timeout_);
-    }
-
     /*从连接socket读取数据*/
     int fd = p_connfd_channel_->GetFd();
     bool disconnect = false;
     auto read_num = ReadData(fd, read_in_buffer_, disconnect);
-    printf("client %d Request:\n%s\n",fd,read_in_buffer_.c_str());
-    if(read_num < 0 || disconnect)
+    if(read_num > 0) printf("client %d Request:\n%s\n",fd,read_in_buffer_.c_str());
+    else if(read_num < 0 || disconnect)
     {
         /*read_num < 0读取数据错误可能是socket连接出了问题，这个时候最好由服务端主动断开连接*/
         DisConndHandler();
@@ -66,7 +59,8 @@ void HttpData::ReadHandler()
 
     /*解析http请求报文*/
     bool finish = false;
-    while(!finish)
+    bool error = false;
+    while(!finish && !error)      //finish和error同为false时才进入循环
     {
         switch (request_msg_parse_state_) {
             /*State1: 解析请求报文的请求行*/
@@ -76,8 +70,9 @@ void HttpData::ReadHandler()
                     case RequestLineParseState::kParseAgain:                //未接收到完整的请求行，返回，等待下一波数据的到来
                         return;
                     case RequestLineParseState::kParseError:                //请求行语法错误，向客户端发送错误代码400并重置
-                        SendErrorMsg(fd, 400, "Bad Request: Request line has syntax error");
-                        return;
+                        SetHttpErrorMsg(fd, 400, "Bad Request: Request line has syntax error");
+                        error = true;
+                        break;
                     case RequestLineParseState::kParseSuccess:              //成功解析了请求行
                         request_msg_parse_state_ = RequestMsgParseState::kRequestLineOK;
                         break;                 //此时read_in_buffer_为：\r\n首部行 + 空行 + 实体
@@ -90,8 +85,9 @@ void HttpData::ReadHandler()
                     case HeaderLinesParseState::kParseAgain:                //首部行数据不完整，返回，等待下一波数据到来
                         return;
                     case HeaderLinesParseState::kParseError:                //首部行语法错误，向客户端发送错误代码400并重置
-                        SendErrorMsg(fd, 400, "Bad Request: Header lines have syntax error");
-                        return;
+                        SetHttpErrorMsg(fd, 400, "Bad Request: Header lines have syntax error");
+                        error = true;
+                        break;
                     case HeaderLinesParseState::kParseSuccess:              //成功解析了首部行
                         request_msg_parse_state_ = RequestMsgParseState::kHeaderLinesOK;
                         break;                //此时read_in_buffer_为：空行 + 实体(字节数应为Content-length + 2)
@@ -107,7 +103,7 @@ void HttpData::ReadHandler()
             /*State4: 查询实体数据大小并判断实体数据是否全部读到了*/
             case RequestMsgParseState::kCheckBody:{
                 //body的两相邻报文到达的间隔不能超过client_body_timeout_，否则超时。
-                p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::client_body_timeout_);
+                p_sub_reactor_->timewheel_.AdjustTimer(p_timer_,GlobalVar::client_body_timeout_);
                 if(fields_values_.find("Content-Length") != fields_values_.end())
                 {
                     int content_length = std::stoi(fields_values_["Content-Length"]);
@@ -116,7 +112,7 @@ void HttpData::ReadHandler()
                 else
                 {
                     //请求报文首部行中有语法错误，发送错误代码和信息并重置
-                    SendErrorMsg(fd, 400, "Bad Request: Lack of argument (Content-Length)");
+                    SetHttpErrorMsg(fd, 400, "Bad Request: Lack of argument (Content-Length)");
                     return;
                 }
                 request_msg_parse_state_ = RequestMsgParseState::kAnalysisRequest;
@@ -125,9 +121,10 @@ void HttpData::ReadHandler()
             case RequestMsgParseState::kAnalysisRequest:{
                 RequestMsgAnalysisState flag = AnalysisRequest();
                 switch (flag) {
-                    case RequestMsgAnalysisState::kAnalysisError:       //发生错误，错误代码机信息的发送在业务函数中完成。
-                        return;
-                    case RequestMsgAnalysisState::kAnalysisSuccess:     //成功。
+                    case RequestMsgAnalysisState::kAnalysisError:       //发生错误
+                        error = true;
+                        break;
+                    case RequestMsgAnalysisState::kAnalysisSuccess:     //成功
                         request_msg_parse_state_ = RequestMsgParseState::kFinish;
                         break;
                 }
@@ -138,27 +135,34 @@ void HttpData::ReadHandler()
                 break;
         }
     }
-    /*发送正常的http响应报文*/
+    /*发送http响应报文*/
     WriteHandler();
 }
 
 void HttpData::WriteHandler()
 {
-    /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
-    MutexRegInOrOut(false);
-
     /*向连接socket写数据*/
     int fd = p_connfd_channel_->GetFd();
+    auto total_num = write_out_buffer_.size() + 1;          //调用c_str函数后，会最末尾加上\0，所以发送的数据总数要加1
+    ssize_t write_sum = 0;
     while(true)
     {
-        /*由于是正常的响应报文，所以一定要把数据完全写出*/
-        auto ret = WriteData(fd, write_out_buffer_);
-        if(ret < 0)
+        bool full;
+        auto ret = WriteData(fd, write_out_buffer_,full);
+        if(ret < 0)                       //写数据出错，断开连接
         {
             DisConndHandler();
-            break;
+            return;
         }
-        else if(ret < write_out_buffer_.size()) continue;
+        write_sum += ret;
+        if(full && write_sum < total_num) //发送缓冲区已写满，但数据还未全部发送完，则注册EPOLLOUT并返回等待epoll_wait返回再回调
+        {
+            MutexRegInOrOut(false);
+            p_sub_reactor_->timewheel_.DelTimer(p_timer_);
+            p_timer_ = nullptr;          //这里需要删除timer，避免因为发送缓冲区已满造成连接超时
+            return;
+        }
+        if(write_sum == total_num) break;
     }
 
     /*发送完数据后，需删除EPOLLOUT事件并重新注册EPOLLIN事件*/
@@ -178,12 +182,12 @@ void HttpData::DisConndHandler()
 void HttpData::ErrorHandler()
 {
     printf("get an error form connect socket: %s\n", strerror(errno));
+    DisConndHandler();
 }
 
-void HttpData::SendErrorMsg(int fd, int error_num, std::string msg)
+void HttpData::SetHttpErrorMsg(int fd, int error_num, std::string msg)
 {
-    /*向服务端发送响应报文时，需要删除注册的EPOLLIN事件并注册EPOLLOUT事件*/
-    MutexRegInOrOut(false);
+    printf("client %d http error: %d %s\n",fd,error_num,msg.c_str());
 
     /*编写响应报文的entidy body*/
     std::string response_body;
@@ -203,22 +207,15 @@ void HttpData::SendErrorMsg(int fd, int error_num, std::string msg)
     response_header += "\r\n";
     
     /*向客户端发送响应报文*/
-    std::string response_buffer = response_header + response_body;
-    while(WriteData(fd,response_buffer));       //尽可能地向客户端发送数据，没写完就算了，不进行错误处理。
-    
-    /*发送完数据后，需删除EPOLLOUT事件并重新注册EPOLLIN事件*/
-    MutexRegInOrOut(true);
-
-    /*重置*/
-    Reset();
+    write_out_buffer_ = response_header + response_body;
 }
 
 void HttpData::ExpiredHandler()
 {
     int fd = p_connfd_channel_->GetFd();
     printf("client %d timeout, shut it down\n",fd);
-    SendErrorMsg(fd,408,"Request Time-out");
-    DisConndHandler();
+    SetHttpErrorMsg(fd, 408, "Request Time-out");
+    WriteHandler();
 }
 
 RequestLineParseState HttpData::ParseRequestLine()
@@ -338,13 +335,15 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     /*echo test*/
     if(filename_ == "hello")
     {
-        write_out_buffer_ += std::string("Content-type: text/plain\r\n") + "\r\n" + "Hello World";
+        std::string body = "Hello World";
+        write_out_buffer_ += std::string("Content-type: text/plain\r\n");
+        write_out_buffer_ += std::string("Content-Length: ") + std::to_string(body.size()) + "\r\n\r\n" + body;
         return RequestMsgAnalysisState::kAnalysisSuccess;
     }
     else if(filename_ == "favicon.ico")
     {
         write_out_buffer_ += "Content-Type: image/png\r\n";
-        write_out_buffer_ += "Content-Length: " + std::to_string(strlen(GlobalVar::favicon)) + "\r\n";
+        write_out_buffer_ += "Content-Length: " + std::to_string(sizeof(GlobalVar::favicon)) + "\r\n";
         write_out_buffer_ += "\r\n" + std::string(GlobalVar::favicon);
         return RequestMsgAnalysisState::kAnalysisSuccess;
     }
@@ -360,7 +359,7 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     struct stat file{};
     if(stat(filename_.c_str(),&file) < 0)
     {
-        SendErrorMsg(fd, 404, "Not Found!");
+        SetHttpErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
     }
     write_out_buffer_ += "Content-Length: " + std::to_string(file.st_size) + "\r\n";
@@ -374,10 +373,11 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     }
     
     /*对GET方法，打开并读取文件，然后填充报文实体*/
-    int file_fd = open(filename_.c_str(),O_RDONLY,0);
+    std::string dir = "../src" +filename_;
+    int file_fd = open(dir.c_str(),O_RDONLY,0);
     if(file_fd < 0)
     {
-        SendErrorMsg(fd, 404, "Not Found!");
+        SetHttpErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
     }
     /*读取文件*/
@@ -386,7 +386,7 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     if(mmap_ret == (void*)-1) //读取文件出错
     {
         munmap(mmap_ret,file.st_size);
-        SendErrorMsg(fd, 404, "Not Found!");
+        SetHttpErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
     }
     char* file_buffer = static_cast<char*>(mmap_ret);
@@ -416,25 +416,29 @@ RequestMsgAnalysisState HttpData::ProcessPOST()
 void HttpData::MutexRegInOrOut(bool epollin)
 {
     /*!
-        epollin为true时，表示注册EPOLLIN而不注册EPOLLOUT，反之。
-        同时，在使用EPOLL_CTL_MOD时，events必须全部重写，不能采
-        用取反然后或等于的形式。比如：
-        __uint32_t old_option = p_connfd_channel_->GetEvents();
-        old_option |= ~EPOLLIN; old_option |= EPOLLOUT
-        p_connfd_channel_->SetEvents(old_option);
-        采取上述这种写法会报invalid argument错误。然而poll是可以这样写的。
-        至于epoll为什么不能，还有待查证。
+     epollin为true时，表示注册EPOLLIN而不注册EPOLLOUT，反之。同时，在使用EPOLL_CTL_MOD时，events必须全部重写，不能采
+     用取反然后或等于的形式。比如：
+     __uint32_t old_option = p_connfd_channel_->GetEvents();
+     old_option |= ~EPOLLIN; old_option |= EPOLLOUT
+     p_connfd_channel_->SetEvents(old_option);
+     采取上述这种写法会报invalid argument错误。然而poll是可以这样写的。至于epoll为什么不能，还有待查证。
      */
     __uint32_t events;
     if(epollin) events = EPOLLIN | EPOLLRDHUP | EPOLLERR;
     else events = EPOLLOUT | EPOLLRDHUP | EPOLLERR;
     p_connfd_channel_->SetEvents(events);
+    p_sub_reactor_->ModEpollEvent(p_connfd_channel_);
 }
 
 void HttpData::Reset()
 {
-    /*重置超时时间*/
-    if(keep_alive_) p_sub_reactor_->AdjustTimer(p_timer_,GlobalVar::keep_alive_timeout_);
+    /*长连接则重置超时时间，短连接则关闭连接*/
+    if(keep_alive_)
+    {
+        auto timeout = GlobalVar::keep_alive_timeout_;
+        if(!p_timer_) p_sub_reactor_->timewheel_.AddTimer(timeout);
+        else p_sub_reactor_->timewheel_.AdjustTimer(p_timer_,timeout);
+    }
     else
     {
         DisConndHandler();

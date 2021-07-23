@@ -119,7 +119,7 @@ private:
     RequestMsgAnalysisState ProcessPOST();
 
     /*工具函数*/
-    void SendErrorMsg(int fd, int error_num, std::string msg);      //发送带错误代码和错误信息的响应报文
+    void SetHttpErrorMsg(int fd, int error_num, std::string msg);   //编写带错误代码和错误信息的响应报文
     void MutexRegInOrOut(bool epollin);                             //对于连接soket，同时只能注册EPOLLIN，EPOLLOUT其中之一
     void Reset();                                                   //还原
     void FillPartOfResponseMsg();                                   //编写响应报文中和请求报文中的方法字段无关的内容

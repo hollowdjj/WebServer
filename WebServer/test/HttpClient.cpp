@@ -58,33 +58,51 @@ int main(int argc,char* argv[])
     int port = atoi(argv[2]);
 
     std::string get;
-    get += "GET /test.txt HTTP/1.1\r\n";
+    get += "GET /favicon.ico HTTP/1.1\r\n";
     get += "Connection: keep-alive\r\n";
+    get +="\r\n";
+
+    std::string head;
+    head += "HEAD /index.html HTTP/1.1\r\n";
+    head += "Connection: close\r\n";
+    head += "\r\n";
+
     std::string post; std::string body = "abcdefg";
     post += "POST / HTTP/1.1\r\n";
     post += "Connection: keep-alive\r\n";
     post += "Content-Type: text/plain\r\n";
-    post += "Content-Length: " + std::to_string(body.size());
+    post += "Content-Length: " + std::to_string(body.size()) + "\r\n";
     post +="\r\n";
     post += body;
 
     int conn_num = 0;
+    int sockfd = CreatTcpConn(ip, port);
+    sleep(0.5);
+    if(sockfd > 0)
+    {
+        auto buf = head.c_str();
+        std::cout<<"total "<<head.size()<<" bytes"<<std::endl;
+        ssize_t res = send(sockfd, buf, strlen(buf), 0);
+        std::cout<<"send "<<res<<" bytes"<<std::endl;
+        ++conn_num;
+    }
+
     while(true)
     {
-        if(conn_num >=5) continue;
-
-        int sockfd = CreatTcpConn(ip, port);
-        sleep(0.5);
-        if(sockfd > 0)
+        char buffer[4096];
+        ssize_t num = recv(sockfd,buffer,4096,0);
+        if(num > 0)
         {
-            auto buf = post.c_str();
-            std::cout<<"total "<<get.size()<<" bytes"<<std::endl;
-            ssize_t res = send(sockfd, buf, strlen(buf), 0);
-            std::cout<<"send "<<res<<" bytes"<<std::endl;
-            ++conn_num;
+            std::cout<<"----------------------recv------------------------"<<std::endl;
+            std::cout<<buffer<<std::endl;
         }
-        break;
+        else if( num == 0)
+        {
+            close(sockfd);
+            break;
+        }
     }
+    //close(sockfd);
     return 0;
 }
 
