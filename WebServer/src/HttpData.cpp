@@ -5,12 +5,11 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <regex>
 /*-----------------------HttpData类-------------------------*/
 HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
                         :p_sub_reactor_(sub_reactor),
                          p_connfd_channel_(connfd_channel),
-                         http_method_(HttpMethod::kEmpty),
-                         http_version_(HttpVersion::kEmpty),
                          request_msg_parse_state_(RequestMsgParseState::kStart)
 {
     if(p_connfd_channel_)
@@ -22,9 +21,9 @@ HttpData::HttpData(EventLoop* sub_reactor,Channel* connfd_channel)
         p_connfd_channel_->SetDisconnHandler([this](){DisConndHandler();});
     }
     /*填充请求报文中方法字段与相应业务处理函数的映射*/
-    method_proc_func_[HttpMethod::kGet]  = [this](){return ProcessGETorHEAD();};
-    method_proc_func_[HttpMethod::kHead] = [this](){return ProcessGETorHEAD();};
-    method_proc_func_[HttpMethod::kPost] = [this](){return ProcessPOST();};
+    method_proc_func_["GET"]  = [this](){return ProcessGETorHEAD();};
+    method_proc_func_["HEAD"] = [this](){return ProcessGETorHEAD();};
+    method_proc_func_["POST"] = [this](){return ProcessPOST();};
 }
 
 HttpData::~HttpData()
@@ -95,7 +94,7 @@ void HttpData::ReadHandler()
             }break;
             /*State3: 对于POST请求，服务端要检查请求报文中的实体数据是否完整，而GET和HEAD则不用*/
             case RequestMsgParseState::kHeaderLinesOK:{
-                if(http_method_ == HttpMethod::kPost)
+                if(fields_values_["method"] == "POST")
                     request_msg_parse_state_ = RequestMsgParseState::kCheckBody;
                 else
                     request_msg_parse_state_ = RequestMsgParseState::kAnalysisRequest;
@@ -234,48 +233,17 @@ RequestLineParseState HttpData::ParseRequestLine()
     auto request_line = read_in_buffer_.substr(0,pos);
     read_in_buffer_.erase(0,pos);        //不要把\r\n也截取了，这样解析首部行时会方便一点
 
-    /*判断方法字段是GET POST还是HEAD*/
-    decltype(pos) pos_method;
-    std::string method;
-    if((pos_method = request_line.find("GET")) == 0)
-    {
-        method = "GET";
-        http_method_ = HttpMethod::kGet;
-    }
-    else if((pos_method = request_line.find("POST")) == 0)
-    {
-        method = "POST";
-        http_method_ = HttpMethod::kPost;
-    }
-    else if((pos_method = request_line.find("HEAD")) == 0)
-    {
-        method = "HEAD";
-        http_method_ = HttpMethod::kHead;
-    }
-    else return RequestLineParseState::kParseError;
+    /*使用正则表达式解析http请求报文的request line*/
+    std::regex r("^(GET|HEAD|POST)\\s(\\S*)\\s(HTTP\\/1\\.[0|1])$");
+    std::smatch results;
+    std::regex_match(request_line,results,r);
+    if(results.empty()) return RequestLineParseState::kParseError;
 
-    /*解析URI*/
-    decltype(pos_method) pos_space,pos_slash,pos_http;
-    if((pos_space = request_line.find(' ')) == std::string::npos
-       || pos_space != method.size()                                //方法字段后必须有个空格
-       || (pos_slash = request_line.find('/',pos_space)) == std::string::npos
-       || pos_slash != pos_space + 1                                //不考虑URI为完整的请求URI的情况
-       || (pos_http = request_line.rfind("HTTP/",pos)) == std::string::npos
-       || pos_http + 8 != pos)                                      //HTTP字段必须满足HTTP/0.0\r\n的格式
-    {
-        return RequestLineParseState::kParseError;
-    }
-    else
-    {
-        filename_ = request_line.substr(pos_slash+1,pos_http-pos_slash-2);
-    }
-    /*解析http协议的版本号*/
-    std::string version;
-    version = request_line.substr(pos-3,pos);
-    if(version == "1.0") http_version_ = HttpVersion::kHttp10;
-    else if(version == "1.1") http_version_ = HttpVersion::kHttp11;
-    else return RequestLineParseState::kParseError;
-
+    /*保存method URI以及version*/
+    fields_values_["method"] = results[1];
+    fields_values_["URI"] = results[2];
+    fields_values_["version"] = results[3];
+    
     return RequestLineParseState::kParseSuccess;
 }
 
@@ -284,21 +252,16 @@ HeaderLinesParseState HttpData::ParseHeaderLines()
     /*!
         只检查每一行的格式。首部行的格式必须为"字段名：|空格|字段值|cr|lf"
         对首部字段是否正确，字段值是否正确均不做判断。
-        此时，read_in_buffer_为：\r\n首部行 + 空行 + 实体
+        另外，此时的read_in_buffer_为：\r\n首部行 + 空行 + 实体
      */
     auto FormatCheck = [this](std::string& target) -> bool
     {
-        auto pos_colon = target.find(':');
-        if(islower(target[0])                     //字段名的首字母必须大写
-          ||pos_colon == std::string::npos        //字段名后必须有冒号
-          || target[pos_colon+1] != ' '           //冒号后面必须紧跟一个空格
-          || pos_colon+1 == target.size()-1)      //空格后面必须要有值
-            return false;
-
+        std::regex r("^([A-Z]\\S*)\\:\\s(.+)$");
+        std::smatch results;
+        std::regex_match(target,results,r);
+        if(results.empty()) return false;
         /*保存首部字段和对应的值*/
-        std::string field = target.substr(0, pos_colon);
-        std::string value = target.substr(pos_colon+2,target.size()-1-pos_colon-2+1);
-        fields_values_[field] = value;
+        fields_values_[results[1]] = results[2];
         return true;
     };
 
@@ -324,23 +287,27 @@ HeaderLinesParseState HttpData::ParseHeaderLines()
 
 RequestMsgAnalysisState HttpData::AnalysisRequest()
 {
-    return method_proc_func_[http_method_]();
+    return method_proc_func_[fields_values_["method"]]();
 }
 
 RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
 {
     /*HEAD方法与GET方法一样，只是不返回报文主体部分。一般用来确认URI的有效性以及资源更新的日期时间等。*/
+    
     FillPartOfResponseMsg();  //编写响应报文中和请求报文中的方法字段无关的内容
 
+    /*解析客户端请求的资源名*/
+    std::string file_name = fields_values_["URI"].substr(fields_values_["URI"].find_last_of('/')+1);
+    
     /*echo test*/
-    if(filename_ == "hello")
+    if(file_name == "hello")
     {
         std::string body = "Hello World";
         write_out_buffer_ += std::string("Content-type: text/plain\r\n");
         write_out_buffer_ += std::string("Content-Length: ") + std::to_string(body.size()) + "\r\n\r\n" + body;
         return RequestMsgAnalysisState::kAnalysisSuccess;
     }
-    else if(filename_ == "favicon.ico")
+    else if(file_name == "favicon.ico")
     {
         write_out_buffer_ += "Content-Type: image/png\r\n";
         write_out_buffer_ += "Content-Length: " + std::to_string(sizeof(GlobalVar::favicon)) + "\r\n";
@@ -349,15 +316,15 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     }
 
     /*首部行的Content-Type字段*/
-    std::string::size_type pos_dot = filename_.find('.');
+    std::string::size_type pos_dot = file_name.find('.');
     std::string file_type = (pos_dot == std::string::npos ?
-                            MimeType::GetMime("default") : MimeType::GetMime(filename_.substr(pos_dot)));  //文件类型
+                            SourceMap::GetMime("default") : SourceMap::GetMime(file_name.substr(pos_dot)));  //文件类型
 
     write_out_buffer_ += "Content-Type: " + file_type + "\r\n";
     /*首部行的Content-Length字段*/
     int fd = p_connfd_channel_->GetFd();
     struct stat file{};
-    if(stat(filename_.c_str(),&file) < 0)
+    if(stat(file_name.c_str(),&file) < 0)
     {
         SetHttpErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
@@ -366,14 +333,14 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     /*首部行结束*/
 
     /*HEAD方法不需要实体*/
-    if(http_method_ == HttpMethod::kHead)
+    if(fields_values_["method"] == "HEAD")
     {
         write_out_buffer_ += "\r\n";
         return RequestMsgAnalysisState::kAnalysisSuccess;
     }
     
     /*对GET方法，打开并读取文件，然后填充报文实体*/
-    std::string dir = "../src" +filename_;
+    std::string dir = "../src" + file_name;
     int file_fd = open(dir.c_str(),O_RDONLY,0);
     if(file_fd < 0)
     {
@@ -433,7 +400,7 @@ void HttpData::MutexRegInOrOut(bool epollin)
 void HttpData::Reset()
 {
     /*长连接则重置超时时间，短连接则关闭连接*/
-    if(keep_alive_)
+    if(fields_values_["Connection"] == "keep-alive" || fields_values_["Connection"] == "Keep-Alive")
     {
         auto timeout = GlobalVar::keep_alive_timeout_;
         if(!p_timer_) p_sub_reactor_->timewheel_.AddTimer(timeout);
@@ -447,21 +414,17 @@ void HttpData::Reset()
     /*重置连接信息*/
     read_in_buffer_.clear();
     write_out_buffer_.clear();
-    filename_.clear();
-    keep_alive_ = false;
     fields_values_.clear();
     request_msg_parse_state_ = RequestMsgParseState::kStart;
-    http_method_ = HttpMethod::kEmpty;
-    http_version_ = HttpVersion::kEmpty;
 }
 
 void HttpData::FillPartOfResponseMsg()
 {
     /*状态行*/
-    std::string version;
-    if(http_version_ == HttpVersion::kHttp10)      version = "HTTP/1.0";
-    else if(http_version_ == HttpVersion::kHttp11) version = "HTTP/1.1";
-    std::string status_line = version + " 200 OK\r\n";
+    // std::string version;
+    // if(http_version_ == HttpVersion::kHttp10)      version = "HTTP/1.0";
+    // else if(http_version_ == HttpVersion::kHttp11) version = "HTTP/1.1";
+    std::string status_line = fields_values_["version"] + " 200 OK\r\n";
 
     /*首部行的Date字段*/
     std::string header_lines;
@@ -469,27 +432,28 @@ void HttpData::FillPartOfResponseMsg()
     /*首部行的Server字段*/
     header_lines += "Server: Hollow-Dai\r\n";
     /*首部行的Connection字段*/
-    if(fields_values_["Connection"] == "keep-alive")
+    if(fields_values_["Connection"] == "keep-alive" || fields_values_["Connection"] == "Keep-Alive")
     {
-        keep_alive_ = true;
+        //keep_alive_ = true;
         header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
                         + std::to_string(GlobalVar::keep_alive_timeout_.count()) + "\r\n";
     }
     else
     {
-        keep_alive_ = false;
+        //keep_alive_ = false;
         header_lines +="Connection: close\r\n";
     }
 
     write_out_buffer_ = status_line + header_lines;
 }
 
-/*-----------------------MimeType类-------------------------*/
-std::unordered_map<std::string,std::string> MimeType::mime_{};
-std::once_flag MimeType::flag_{};
+/*-----------------------SourceMap类-------------------------*/
+std::unordered_map<std::string,std::string> SourceMap::mime_{};
+std::once_flag SourceMap::flag_{};
 
-void MimeType::Init()
+void SourceMap::Init()
 {
+    /*文件类型*/
     mime_[".html"] = "text/html";
     mime_[".avi"] = "video/x-msvideo";
     mime_[".bmp"] = "image/bmp";
@@ -506,8 +470,8 @@ void MimeType::Init()
     mime_["default"] = "text/html";
 }
 
-std::string MimeType::GetMime(const std::string& suffix)
+std::string SourceMap::GetMime(const std::string& suffix)
 {
-    std::call_once(MimeType::flag_,MimeType::Init);     //Init函数只会调用一次
+    std::call_once(SourceMap::flag_,SourceMap::Init);     //Init函数只会调用一次
     return mime_.find(suffix) == mime_.end() ? mime_["default"] : mime_[suffix];
 }

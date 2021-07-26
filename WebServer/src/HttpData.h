@@ -51,23 +51,6 @@ enum class RequestMsgAnalysisState{
     kAnalysisError,
     kAnalysisSuccess,
 };
-/*!
-@brief 表示http请求是GET POST还是HEAD
-*/
-enum class HttpMethod{
-    kEmpty,
-    kGet,
-    kPost,
-    kHead,
-};
-/*!
-@brief Http协议版本
-*/
-enum class HttpVersion{
-    kEmpty,
-    kHttp10,    //http/1.0
-    kHttp11,    //http/1.1
-};
 
 /*!
 @brief 用于处理http数据的类
@@ -86,14 +69,9 @@ private:
 
     std::string read_in_buffer_{};                                    //http请求报文
     std::string write_out_buffer_{};                                  //http响应报文
-    std::string filename_{};                                          //客户端请求的资源文件名
-    bool keep_alive_ = false;                                         //true为长连接，false为短连接
-    std::map<std::string,std::string> fields_values_{};               //请求报文首部字段与其对应的值
-    HttpMethod http_method_;                                          //表示为GET POST还是HEAD
-    HttpVersion http_version_;                                        //http协议版本号
-
     RequestMsgParseState request_msg_parse_state_;                    //表示请求报文的解析状态
-    std::map<HttpMethod,std::function<RequestMsgAnalysisState()>> method_proc_func_;  //请求报文中方法字段与业务处理函数的映射
+    std::map<std::string,std::string> fields_values_{};               //请求报文字段与其对应的值
+    std::map<std::string,std::function<RequestMsgAnalysisState()>> method_proc_func_;  //请求报文中方法字段与业务处理函数的映射
 public:
     HttpData() = default;
     HttpData(EventLoop* sub_reactor,Channel* connfd_channel);
@@ -133,14 +111,14 @@ private:
 
 @Date: 2021/7/14 下午7:25
 */
-class MimeType{
+class SourceMap{
 private:
     static void Init();                                             //初始化mime_对象，必须保证只能调用一次
     static std::unordered_map<std::string,std::string> mime_;       //文件后缀与文件类型的映射
-    MimeType() = default;
+    SourceMap() = default;
 public:
-    MimeType(const MimeType&) = delete;
-    MimeType& operator=(const MimeType&) = delete;
+    SourceMap(const SourceMap&) = delete;
+    SourceMap& operator=(const SourceMap&) = delete;
 
     static std::string GetMime(const std::string& suffix);          //根据后缀获取文件类型
 private:

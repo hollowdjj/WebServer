@@ -58,7 +58,7 @@ int main(int argc,char* argv[])
     int port = atoi(argv[2]);
 
     std::string get;
-    get += "GET /favicon.ico HTTP/1.1\r\n";
+    get += "GET hello HTTP/1.1\r\n";
     get += "Connection: keep-alive\r\n";
     get +="\r\n";
 
@@ -80,8 +80,8 @@ int main(int argc,char* argv[])
     sleep(0.5);
     if(sockfd > 0)
     {
-        auto buf = head.c_str();
-        std::cout<<"total "<<head.size()<<" bytes"<<std::endl;
+        auto buf = get.c_str();
+        std::cout<<"total "<<get.size()<<" bytes"<<std::endl;
         ssize_t res = send(sockfd, buf, strlen(buf), 0);
         std::cout<<"send "<<res<<" bytes"<<std::endl;
         ++conn_num;
