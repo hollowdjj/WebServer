@@ -80,10 +80,11 @@ int main(int argc,char* argv[])
     sleep(0.5);
     if(sockfd > 0)
     {
-        auto buf = get.c_str();
-        std::cout<<"total "<<get.size()<<" bytes"<<std::endl;
+        auto buf = post.c_str();
+        std::cout<<"----------------------send------------------------"<<std::endl;
+        std::cout<<post<<std::endl;
         ssize_t res = send(sockfd, buf, strlen(buf), 0);
-        std::cout<<"send "<<res<<" bytes"<<std::endl;
+        
         ++conn_num;
     }
 

@@ -280,7 +280,7 @@ HeaderLinesParseState HttpData::ParseHeaderLines()
         }
         std::string header_line = read_in_buffer_.substr(old_pos+2,pos_cr-old_pos-2); //检查首部行格式
         if(!FormatCheck(header_line)) return HeaderLinesParseState::kParseError;
-    }//跳出循环时，old_pos为最后一个完整首部行\r的索引，pos_cr为空行\r\n的索引
+    }
 
     return HeaderLinesParseState::kParseSuccess;
 }
@@ -322,9 +322,10 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
 
     write_out_buffer_ += "Content-Type: " + file_type + "\r\n";
     /*首部行的Content-Length字段*/
+    std::string dir = "../resource/" + file_name;
     int fd = p_connfd_channel_->GetFd();
     struct stat file{};
-    if(stat(file_name.c_str(),&file) < 0)
+    if(stat(dir.c_str(),&file) < 0)
     {
         SetHttpErrorMsg(fd, 404, "Not Found!");
         return RequestMsgAnalysisState::kAnalysisError;
@@ -340,7 +341,6 @@ RequestMsgAnalysisState HttpData::ProcessGETorHEAD()
     }
     
     /*对GET方法，打开并读取文件，然后填充报文实体*/
-    std::string dir = "../src" + file_name;
     int file_fd = open(dir.c_str(),O_RDONLY,0);
     if(file_fd < 0)
     {
