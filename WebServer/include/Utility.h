@@ -87,11 +87,14 @@ ssize_t WriteData(int fd, const char* source, size_t n);
 
 @param[in] fd      连接socket的文件描述符
 @param[in] buffer  待写的数据
+@param[in] full    true表示写数据失败是由于输出缓冲区已满造成的
 @return            成功写出的字节数。-1表示写数据出错。返回0不一定表示buffer的数据都写完了
 */
 ssize_t WriteData(int fd, std::string& buffer, bool& full);
 
-/*线程池*/
+/*!
+@brief 线程池
+*/
 class ThreadPool{
 private:
     std::vector<std::thread> workers_;           //线程池
@@ -131,4 +134,16 @@ auto ThreadPool::AddTaskToPool(F&& f,Args&&... args) -> std::future<typename std
     cond_.notify_one();
     return res;
 }
+
+/*!
+@brief nocopyable基类
+*/
+class NonCopyable{
+protected:
+    NonCopyable() = default;
+    ~NonCopyable() = default;
+public:
+    NonCopyable(const NonCopyable&) = delete;
+    NonCopyable& operator=(const NonCopyable&) = delete;
+};
 #endif
