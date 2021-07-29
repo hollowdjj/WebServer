@@ -326,3 +326,9 @@ ThreadPool::~ThreadPool()
     }
     for (auto& item : workers_) item.join();
 }
+
+std::shared_ptr<spdlog::logger> GetLogger()
+{
+    static auto logger = spdlog::basic_logger_mt("basic_logger","../temp/log.txt");
+    return logger;
+}

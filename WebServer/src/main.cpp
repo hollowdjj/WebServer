@@ -19,6 +19,7 @@ void SIGTERM_Handler(int sig)
 void SIGPIPE_Handler(int sig)
 {
     //do nothing
+    //TODO 解释一下SIGPIPE
 }
 
 void SIGALRM_Handler(int sig)
@@ -38,16 +39,19 @@ int main()
     /*设置信号处理的回调函数*/
     if(signal(SIGTERM, SIGTERM_Handler) == SIG_ERR)
     {
+        //GetLogger()->error("set SIGTERM handler failed");
         printf("set SIGTERM handler failed\n");
         return -1;
     }
     if(signal(SIGALRM, SIGALRM_Handler) == SIG_ERR)
     {
+        //GetLogger()->error("set SIGALRM handler failed");
         printf("set SIGALRM handler failed\n");
         return -1;
     }
     if(signal(SIGPIPE, SIGPIPE_Handler) == SIG_ERR)
     {
+        //GetLogger()->error("set SIGPIPE handler failed");
         printf("set SIGPIPE handler failed\n");
         return -1;
     }

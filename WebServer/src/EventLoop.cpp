@@ -187,7 +187,7 @@ void EventLoop::GetActiveEventsAndProc()
             }
             else
             {
-                printf("Set revents on emtpy Channel Object");
+                printf("Set revents on emtpy Channel Object\n");
             }
         }
     }

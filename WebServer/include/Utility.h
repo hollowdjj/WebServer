@@ -22,6 +22,11 @@
 #include <iostream>
 #include <chrono>
 
+/*Third-Party*/
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/basic_file_sink.h"
+
+
 /*！
 @Author: DJJ
 @Description: 定义工具函数以及工具类
@@ -44,14 +49,17 @@ struct GlobalVar{
 @brief 将文件描述符fd设置为非阻塞模式
 */
 int SetNonBlocking(int fd);
+
 /*!
 @brief 绑定端口号并监听。成功时返回监听socket的文件描述符，否则返回-1
 */
 int BindAndListen(int port);
+
 /*!
 @brief 返回GMT时间
 */
 std::string GetTime();
+
 /*!
 @brief ET模式下从文件描述符(非socket)读n个字节的数据
 
@@ -146,4 +154,9 @@ public:
     NonCopyable(const NonCopyable&) = delete;
     NonCopyable& operator=(const NonCopyable&) = delete;
 };
+
+/*!
+@brief 生成一个全局唯一的log对象
+*/
+std::shared_ptr<spdlog::logger> GetLogger();
 #endif
