@@ -35,7 +35,7 @@ void HttpData::LinkTimer(Timer* p_timer)
 {
     if(!p_timer)
     {
-        printf("can't link an empty timer\n");
+        ::GetLogger()->error("can't link an empty timer");
         return;
     }
     p_timer_ = p_timer;
@@ -48,7 +48,7 @@ void HttpData::ReadHandler()
     int fd = p_connfd_channel_->GetFd();
     bool disconnect = false;
     auto read_num = ReadData(fd, read_in_buffer_, disconnect);
-    if(read_num > 0) printf("client %d Request:\n%s\n",fd,read_in_buffer_.c_str());
+    if(read_num > 0) ::GetLogger()->debug("client {} Request:\n{}\n",fd,read_in_buffer_.c_str());
     else if(read_num < 0 || disconnect)
     {
         /*read_num < 0读取数据错误可能是socket连接出了问题，这个时候最好由服务端主动断开连接*/
@@ -173,20 +173,25 @@ void HttpData::WriteHandler()
 
 void HttpData::DisConndHandler()
 {
-    printf("client %d disconnect\n",p_connfd_channel_->GetFd());
-    /*客户端断开连接时，服务器端也断开连接。此时，需将连接socket从事件池中删除*/
-    p_sub_reactor_->DelEpollEvent(p_connfd_channel_);
+    int fd = p_connfd_channel_->GetFd();
+    /*此时，需将连接socket从事件池中删除*/
+    if(p_sub_reactor_->DelEpollEvent(p_connfd_channel_))
+    {
+        GlobalVar::DecTotalUserNum();
+        ::GetLogger()->info("Client {} disconnect, current user number: {}",fd,GlobalVar::GetTotalUserNum());
+    }
+
 }
 
 void HttpData::ErrorHandler()
 {
-    printf("get an error form connect socket: %s\n", strerror(errno));
+    ::GetLogger()->error("Get an error form connect socket: {}", strerror(errno));
     DisConndHandler();
 }
 
 void HttpData::SetHttpErrorMsg(int fd, int error_num, std::string msg)
 {
-    printf("client %d http error: %d %s\n",fd,error_num,msg.c_str());
+    ::GetLogger()->debug("Client {} http error: {} {}",fd,error_num,msg.c_str());
 
     /*编写响应报文的entidy body*/
     std::string response_body;
@@ -212,7 +217,7 @@ void HttpData::SetHttpErrorMsg(int fd, int error_num, std::string msg)
 void HttpData::ExpiredHandler()
 {
     int fd = p_connfd_channel_->GetFd();
-    printf("client %d timeout, shut it down\n",fd);
+    ::GetLogger()->debug("client {} timeout, shut it down",fd);
     SetHttpErrorMsg(fd, 408, "Request Time-out");
     WriteHandler();
 }
@@ -234,7 +239,7 @@ RequestLineParseState HttpData::ParseRequestLine()
     read_in_buffer_.erase(0,pos);        //不要把\r\n也截取了，这样解析首部行时会方便一点
 
     /*使用正则表达式解析http请求报文的request line*/
-    std::regex r("^(GET|HEAD|POST)\\s(\\S*)\\s(HTTP\\/1\\.[0|1])$");
+    std::regex r(R"(^(GET|HEAD|POST)\s(\S*)\s(HTTP\/1\.[0|1])$)");
     std::smatch results;
     std::regex_match(request_line,results,r);
     if(results.empty()) return RequestLineParseState::kParseError;
@@ -256,7 +261,7 @@ HeaderLinesParseState HttpData::ParseHeaderLines()
      */
     auto FormatCheck = [this](std::string& target) -> bool
     {
-        std::regex r("^([A-Z]\\S*)\\:\\s(.+)$");
+        std::regex r(R"(^([A-Z]\S*)\:\s(.+)$)");
         std::smatch results;
         std::regex_match(target,results,r);
         if(results.empty()) return false;
@@ -421,9 +426,6 @@ void HttpData::Reset()
 void HttpData::FillPartOfResponseMsg()
 {
     /*状态行*/
-    // std::string version;
-    // if(http_version_ == HttpVersion::kHttp10)      version = "HTTP/1.0";
-    // else if(http_version_ == HttpVersion::kHttp11) version = "HTTP/1.1";
     std::string status_line = fields_values_["version"] + " 200 OK\r\n";
 
     /*首部行的Date字段*/
@@ -434,13 +436,11 @@ void HttpData::FillPartOfResponseMsg()
     /*首部行的Connection字段*/
     if(fields_values_["Connection"] == "keep-alive" || fields_values_["Connection"] == "Keep-Alive")
     {
-        //keep_alive_ = true;
         header_lines += "Connection: keep-alive\r\n" + std::string("Keep-Alive: timeout=")
                         + std::to_string(GlobalVar::keep_alive_timeout_.count()) + "\r\n";
     }
     else
     {
-        //keep_alive_ = false;
         header_lines +="Connection: close\r\n";
     }
 

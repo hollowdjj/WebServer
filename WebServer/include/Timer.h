@@ -13,7 +13,7 @@
 #include <list>
 #include <optional>
 /*User-define Headers*/
-
+#include "Utility.h"
 
 /*！
 @Author: DJJ
@@ -47,7 +47,7 @@ public:
     void CallExpiredHandler()
     {
         if(expired_sHandler_) expired_sHandler_();
-        else printf("expired handler has not been registered yet\n");
+        else ::GetLogger()->warn("expired handler has not been registered yet");
     }
 private:
     void SetTriggerCycles(size_t trigger_cycles) { trigger_cycles_ = trigger_cycles;};   //修改定时器的触发圈数

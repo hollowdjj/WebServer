@@ -109,7 +109,7 @@ std::optional<std::pair<size_t /*cycle*/, size_t /*index*/>> TimeWheel::CalPosIn
 {
     if(timeout<std::chrono::seconds(0))
     {
-        printf("timeout can't be less than 0\n");
+        ::GetLogger()->warn("timeout can't be less than 0");
         return std::nullopt;
     }
     /*!

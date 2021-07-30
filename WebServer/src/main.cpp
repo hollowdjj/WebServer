@@ -39,28 +39,29 @@ int main()
     /*设置信号处理的回调函数*/
     if(signal(SIGTERM, SIGTERM_Handler) == SIG_ERR)
     {
-        //GetLogger()->error("set SIGTERM handler failed");
-        printf("set SIGTERM handler failed\n");
+        ::GetLogger()->error("set SIGTERM handler failed");
         return -1;
     }
     if(signal(SIGALRM, SIGALRM_Handler) == SIG_ERR)
     {
-        //GetLogger()->error("set SIGALRM handler failed");
-        printf("set SIGALRM handler failed\n");
+        ::GetLogger()->error("set SIGALRM handler failed");
         return -1;
     }
     if(signal(SIGPIPE, SIGPIPE_Handler) == SIG_ERR)
     {
-        //GetLogger()->error("set SIGPIPE handler failed");
-        printf("set SIGPIPE handler failed\n");
+        ::GetLogger()->error("set SIGPIPE handler failed");
         return -1;
     }
 
     int port = 6688;
+
     /*创建一个线程池。注意主线程不在线程池中*/
     ThreadPool thread_pool(std::thread::hardware_concurrency() - 1);
     EventLoop main_reactor = EventLoop(true);
     server = CreateHttpServer(port, &main_reactor, &thread_pool);
+    if(!GetLogger()) return 0;
+    GetLogger()->set_pattern("[%Y-%m-%d %H:%M:%S] [thread %t] [%l] %v");
+
     /*服务器开始运行*/
     server->Start();
     alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval_).count());

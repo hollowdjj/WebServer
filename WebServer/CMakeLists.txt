@@ -14,7 +14,7 @@ add_executable(Test ./test/Test.cpp)
 
 
 
-include(FetchContent)      # 照写，不需要修改
+include(FetchContent)
 FetchContent_Declare(	spdlog	#库名字
 						GIT_REPOSITORY https://gitee.com/liguo_1993/spdlog.git	# 仓库地址
 						GIT_TAG v1.x # 库版本

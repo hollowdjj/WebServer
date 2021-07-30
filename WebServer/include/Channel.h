@@ -12,6 +12,7 @@
 #include <memory>
 
 /*User-define Headers*/
+#include "Utility.h"
 
 /*！
 @Author: DJJ
@@ -85,27 +86,27 @@ private:
     void CallReadHandler()
     {
         if(ReadHandler_) ReadHandler_();
-        else printf("read handler has not been registered yet\n");
+        else ::GetLogger()->warn("read handler has not been registered yet");
     }
     void CallWriteHandler()
     {
         if(WriteHandler_) WriteHandler_();
-        else printf("write handler has not been registered yet\n");
+        else ::GetLogger()->warn("write handler has not been registered yet");
     }
     void CallErrorHandler()
     {
         if(ErrorHandler_) ErrorHandler_();
-        else printf("error handler has not been registered yet\n");
+        else ::GetLogger()->warn("error handler has not been registered yet");
     }
     void CallConnHandler()
     {
         if(ConnHandler_) ConnHandler_();
-        else printf("connect handler has not been registered yet\n");
+        else ::GetLogger()->warn("connect handler has not been registered yet");
     }
     void CallDisconnHandler()
     {
         if(DisConnHandler_) DisConnHandler_();
-        else printf("disconnect handler has not been registered yet\n");
+        else ::GetLogger()->warn("disconnect handler has not been registered yet");
     }
 };
 

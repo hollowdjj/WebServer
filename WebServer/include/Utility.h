@@ -36,13 +36,31 @@
 /*全局变量结构体*/
 struct GlobalVar{
     static const int kMaxUserNum = 100000;                    //最大并发连接数量
+    static int total_user_num_;                               //当前用户数量
     static std::chrono::seconds slot_interval_;               //时间轮的槽间隔
-    static std::chrono::seconds server_process_timeout_;      //服务器处理
     static std::chrono::seconds client_header_timeout_;       //tcp连接建立后,必须在该时间内接收到完整的请求行和首部行，否则超时
     static std::chrono::seconds client_body_timeout_;         //实体数据两相邻包到达的间隔时间不能超过该时间，否则超时
     static std::chrono::seconds keep_alive_timeout_;          //长连接的超时时间
     static int slot_num_;                                     //时间轮的槽数
     static char favicon[555];
+
+    static void IncTotalUserNum()
+    {
+        std::unique_lock locker(mutex_);
+        ++total_user_num_;
+    }
+    static void DecTotalUserNum()
+    {
+        std::unique_lock locker(mutex_);
+        --total_user_num_;
+    }
+    static int GetTotalUserNum()
+    {
+        std::unique_lock locker(mutex_);
+        return total_user_num_;
+    }
+private:
+    static std::mutex mutex_;
 };
 
 /*!

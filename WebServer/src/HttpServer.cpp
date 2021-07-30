@@ -63,17 +63,17 @@ void HttpServer::NewConnHandler()
     int connfd = accept(listenfd_,reinterpret_cast<sockaddr*>(&client_addr),&client_addr_len);
     if(connfd < 0)
     {
-        printf("accept error: %s\n", strerror(errno));
+        ::GetLogger()->error("accept error: {}", strerror(errno));
         return;
     }
     //限制服务器的最大并发连接数
-    if(current_user_num >= GlobalVar::kMaxUserNum)
+    if(GlobalVar::GetTotalUserNum() >= GlobalVar::kMaxUserNum)
     {
-        printf("max user number limit\n");
+        ::GetLogger()->warn("max user number limit");
         close(connfd);
         return;
     }
-    ++current_user_num;
+    GlobalVar::IncTotalUserNum();
     SetNonBlocking(connfd);
     
     /*将连接socket分发给SubReactor*/
@@ -90,7 +90,6 @@ void HttpServer::NewConnHandler()
     int smallest_num = sub_reactors_[0]->GetConnectionNum();
     unsigned long index = 0;
     std::vector<int> num_of_each;
-    printf("------------------------------------------------------\n");
     for (unsigned long i = 0; i < sub_reactors_.size(); ++i)
     {
         int num =  sub_reactors_[i]->GetConnectionNum();
@@ -105,19 +104,20 @@ void HttpServer::NewConnHandler()
     connfd_channel->SetHolder(new HttpData(sub_reactors_[index].get(),connfd_channel));
     if(sub_reactors_[index]->AddEpollEvent(connfd_channel))
     {
-        //GetLogger()->debug("new connection established through socket {} and handled by subreactor {}",connfd,index);
-        printf("new connection established through socket %d and handled by subreactor %lu\n",connfd,index);
+        ::GetLogger()->debug("new connection {} handled by subreactor {}",connfd,index);
         ++num_of_each[index];
     }
 
     /*打印当前每个SubReactor的连接数量*/
     for (int i = 0; i < num_of_each.size(); ++i)
     {
-        printf("subreactor %d is handling %d connections\n",i,num_of_each[i]);
+        ::GetLogger()->debug("Subreactor {} is handling {} connections",i,num_of_each[i]);
     }
+
+    ::GetLogger()->info("New connection {}, current user number: {}",connfd,GlobalVar::GetTotalUserNum());
 }
 
 void HttpServer::ErrorHandler()
 {
-    printf("get an error form listen socket: %s\n", strerror(errno));
+    ::GetLogger()->critical("Get an error from listen socket: {}", strerror(errno));
 }

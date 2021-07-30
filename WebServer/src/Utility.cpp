@@ -4,6 +4,8 @@
 ///////////////////////////
 //   Global    Variables //
 ///////////////////////////
+std::mutex GlobalVar::mutex_{};
+int GlobalVar::total_user_num_ = 0;
 std::chrono::seconds GlobalVar::slot_interval_ = std::chrono::seconds(1);            /* NOLINT */
 std::chrono::seconds GlobalVar::client_header_timeout_ = std::chrono::seconds(30);   /* NOLINT */
 std::chrono::seconds GlobalVar::client_body_timeout_ = std::chrono::seconds(30);     /* NOLINT */
@@ -89,7 +91,7 @@ int BindAndListen(int port)
     int listenfd = socket(PF_INET,SOCK_STREAM,0);
     if(listenfd == -1)
     {
-        printf("create socket error: %s\n", strerror(errno));
+        ::GetLogger()->critical("create listen socket error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -99,7 +101,7 @@ int BindAndListen(int port)
     int res = setsockopt(listenfd,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof reuse);
     if(res == -1)
     {
-        printf("set socketpot error: %s\n",strerror(errno));
+        ::GetLogger()->error("set listen socket opt error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -117,7 +119,7 @@ int BindAndListen(int port)
     res = bind(listenfd,reinterpret_cast<sockaddr*>(&server_addr),sizeof server_addr);
     if(res == -1)
     {
-        printf("bind error: %s\n",strerror(errno));
+        ::GetLogger()->critical("listen socket bind error: {}",strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -126,7 +128,7 @@ int BindAndListen(int port)
     res = listen(listenfd,2048);
     if(res == -1)
     {
-        printf("listen error: %s\n",strerror(errno));
+        ::GetLogger()->critical("listen error: {}",strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -160,7 +162,7 @@ ssize_t ReadData(int fd, char* dest, size_t n)
             else if(errno == EAGAIN) return read_sum;  //当前无数据可读，返回已读取的字节数
             else
             {
-                printf("read data from filefd %d error: %s\n",fd, strerror(errno));
+                ::GetLogger()->error("read data from filefd {} error: {}",fd, strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
@@ -200,14 +202,14 @@ ssize_t ReadData(int fd,std::string& buffer,bool& disconnect)
             else if(errno == EAGAIN || errno == EWOULDBLOCK) return read_sum; //当前无数据可读
             else
             {
-                printf("read data from socket %d error: %s\n",fd,strerror(errno));
+                ::GetLogger()->error("read data from socket {} error: {}",fd,strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
         else if(read_once == 0)
         {
             /*一般情况下，recv返回0是由于客户端关闭连接导致的*/
-            printf("clinet %d has close the connection\n",fd);
+            ::GetLogger()->debug("clinet {} has close the connection",fd);
             disconnect = true;
             break;
         }
@@ -233,7 +235,7 @@ ssize_t WriteData(int fd, const char* source, size_t n)
             else if(errno == EAGAIN) return write_sum;   //客户端或者服务器自身的缓冲区已经写满了，返回
             else
             {
-                printf("write data to filefd %d error: %s\n",fd, strerror(errno));
+                ::GetLogger()->error("write data to filefd {} error: {}",fd, strerror(errno));
                 return -1;                               //否则表示发生了错误，返回-1
             }
         }
@@ -274,7 +276,7 @@ ssize_t WriteData(int fd, std::string& buffer, bool& full)
             }
             else
             {
-                printf("write data to socket %d error: %s\n",fd, strerror(errno));
+                ::GetLogger()->error("write data to socket {} error: {}",fd, strerror(errno));
                 return -1;                                                    //否则表示发生了错误，返回-1
             }
         }
@@ -329,6 +331,17 @@ ThreadPool::~ThreadPool()
 
 std::shared_ptr<spdlog::logger> GetLogger()
 {
-    static auto logger = spdlog::basic_logger_mt("basic_logger","../temp/log.txt");
-    return logger;
+    try
+    {
+        static auto logger = spdlog::basic_logger_mt("basic_logger","../temp/log.txt");
+        return logger;
+    }
+    catch(const spdlog::spdlog_ex& ex)
+    {
+        std::cout<<"Log initialization failed: "<<ex.what()<<std::endl;
+    }
+
+    return {};
 }
+
+

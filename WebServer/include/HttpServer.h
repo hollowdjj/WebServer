@@ -26,7 +26,6 @@ private:
     int listenfd_;                                                        //监听socket
     int port_;                                                            //端口号
     Channel* p_listen_channel_;                                           //监听socket的Channel
-    int current_user_num = 0;                                             //当前用户数量
     EventLoop* p_main_reactor_;                                           //MainReactor
     std::vector<std::shared_ptr<EventLoop>> sub_reactors_;                //SubReactors
     ThreadPool* p_sub_thread_pool_;                                       //管理子线程的线程池

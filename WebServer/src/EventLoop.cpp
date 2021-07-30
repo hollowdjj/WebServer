@@ -41,7 +41,7 @@ bool EventLoop::AddEpollEvent(Channel* event_channel, std::chrono::seconds timeo
     event.events = (event_channel->GetEvents() | EPOLLET);
     if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&event) < 0)
     {
-        printf("epoll add error: %s", strerror(errno));
+        ::GetLogger()->error("epoll add error: {}", strerror(errno));
         return false;
     }
     
@@ -78,7 +78,7 @@ bool EventLoop::ModEpollEvent(Channel* event_channel)
         event.events = (event_channel->GetEvents() | EPOLLET);
         if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&event) < 0)
         {
-            printf("epoll mod error: %s\n", strerror(errno));
+            ::GetLogger()->error("epoll mod error: {}", strerror(errno));
             return false;
         }
     }
@@ -97,7 +97,7 @@ bool EventLoop::DelEpollEvent(Channel* event_channel)
     event.events = 0;
     if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,&event)<0)
     {
-        printf("epoll del error: %s\n", strerror(errno));
+        ::GetLogger()->error("epoll del error: {}", strerror(errno));
         return false;
     }
 
@@ -166,7 +166,7 @@ void EventLoop::GetActiveEventsAndProc()
         if(active_event_num < 0 && errno != EINTR)
         {
             /*这里不对系统中断信号作出处理，程序照常运行*/
-            printf("eopll wait error: %s\n", strerror(errno));
+            ::GetLogger()->error("eopll wait error: {}", strerror(errno));
             return;
         }
         else if(active_event_num == 0)
@@ -187,7 +187,7 @@ void EventLoop::GetActiveEventsAndProc()
             }
             else
             {
-                printf("Set revents on emtpy Channel Object\n");
+                ::GetLogger()->warn("Set revents on emtpy Channel Object");
             }
         }
     }
