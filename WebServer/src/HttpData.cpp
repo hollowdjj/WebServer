@@ -142,7 +142,7 @@ void HttpData::WriteHandler()
 {
     /*向连接socket写数据*/
     int fd = p_connfd_channel_->GetFd();
-    auto total_num = write_out_buffer_.size() + 1;          //调用c_str函数后，会最末尾加上\0，所以发送的数据总数要加1
+    auto total_num = write_out_buffer_.size() + 1; //调用c_str函数后，会最末尾加上\0，所以发送的数据总数要加1
     ssize_t write_sum = 0;
     while(true)
     {
@@ -158,7 +158,7 @@ void HttpData::WriteHandler()
         {
             MutexRegInOrOut(false);
             p_sub_reactor_->timewheel_.DelTimer(p_timer_);
-            p_timer_ = nullptr;          //这里需要删除timer，避免因为发送缓冲区已满造成连接超时
+            p_timer_ = nullptr;          //这里需要取消timer，避免因为发送缓冲区已满造成连接超时
             return;
         }
         if(write_sum == total_num) break;
@@ -180,7 +180,6 @@ void HttpData::DisConndHandler()
         GlobalVar::DecTotalUserNum();
         ::GetLogger()->info("Client {} disconnect, current user number: {}",fd,GlobalVar::GetTotalUserNum());
     }
-
 }
 
 void HttpData::ErrorHandler()
@@ -209,8 +208,6 @@ void HttpData::SetHttpErrorMsg(int fd, int error_num, std::string msg)
     response_header += "Connection: close\r\n";
     response_header += "Content-Length: " + std::to_string(response_body.size()) + "\r\n";
     response_header += "\r\n";
-    
-    /*向客户端发送响应报文*/
     write_out_buffer_ = response_header + response_body;
 }
 

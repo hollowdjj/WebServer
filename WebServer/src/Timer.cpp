@@ -8,6 +8,12 @@ Timer::Timer(size_t trigger_cycles, size_t slot_index)
               slot_index_(slot_index) {}
 
 
+void Timer::CallExpiredHandler()
+{
+    if(expired_sHandler_) expired_sHandler_();
+    else ::GetLogger()->warn("expired handler has not been registered yet");
+}
+
 /*------------------------------TimerManager类----------------------------------*/
 TimeWheel::TimeWheel()
 {
@@ -17,9 +23,9 @@ TimeWheel::TimeWheel()
     assert(res != -1);
     SetNonBlocking(tick_fd_[0]);
     SetNonBlocking(tick_fd_[1]);
-    p_tickfd_channel = new Channel(tick_fd_[0],false,false);
-    p_tickfd_channel->SetEvents(EPOLLIN);
-    p_tickfd_channel->SetReadHandler([this](){Tick();});
+    p_tickfd_channel_ = new Channel(tick_fd_[0], false, false);
+    p_tickfd_channel_->SetEvents(EPOLLIN);
+    p_tickfd_channel_->SetReadHandler([this](){Tick();});
 }
 
 TimeWheel::~TimeWheel()

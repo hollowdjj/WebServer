@@ -1,12 +1,14 @@
 #include "Channel.h"
 #include "HttpServer.h"
 #include "HttpData.h"
+#include "Utility.h"
+#include "EventLoop.h"
 
 HttpServer::HttpServer(int port, EventLoop* main_reactor,ThreadPool* sub_thread_pool)
             : listenfd_(BindAndListen(port)), 
               p_main_reactor_(main_reactor), 
-              p_sub_thread_pool_(sub_thread_pool)
-            , p_listen_channel_(new Channel(listenfd_, true, false))
+              p_sub_thread_pool_(sub_thread_pool),
+              p_listen_channel_(new Channel(listenfd_, true, false))
 {
     assert(listenfd_ != -1);
     port_ = port;

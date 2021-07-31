@@ -1,3 +1,7 @@
+/*！
+@Author: DJJ
+@Date: 2021/6/13 下午10:21
+*/
 #ifndef WEBSERVER_EVENTLOOP_H
 #define WEBSERVER_EVENTLOOP_H
 
@@ -13,19 +17,10 @@
 #include "Utility.h"
 #include "Timer.h"
 
+/*前向声明*/
 class Channel;
 class HttpData;
 
-/*！
-@Author: DJJ
-@Description: EventLoop类
-
- 事件池，唯一属于一个EventLoop对象。MainReactor产生的connfd会被分发给EventLoop表示的SubReactor中的事件池Epoller
- 事件池负责调用epoll_wait函数并返回就绪事件，并且所有连接socket、监听socket以及HttpData对象的生命周期都由Epoller
- 唯一管理。
-
-@Date: 2021/6/13 下午10:21
-*/
 class EventLoop {
 private:
     std::mutex mutex_for_wakeup_;                                 //用于休眠线程的互斥锁
@@ -47,17 +42,57 @@ public:
     explicit EventLoop(bool is_main_reactor = false);
     ~EventLoop();
 
-    bool AddEpollEvent(Channel* event_channel, std::chrono::seconds timeout = GlobalVar::client_header_timeout_); //添加新的事件
-    bool ModEpollEvent(Channel* event_channel);                    //修改事件
-    bool DelEpollEvent(Channel* event_channel);                    //删除内核事件表中注册的文件描述符
-    void StartLoop();                                              //开始监听事件
-    void QuitLoop();                                               //清空事件池停止运行
+    /*!
+    @brief 添加新的监听对象。
 
-    int GetConnectionNum();                                        //返回连接数量
-    [[maybe_unused]]int GetEpollfd(){return epollfd_;}             //返回epoll内核事件表
+    如果添加的监听对象是连接socket，那么该函数会对其holder设置并挂靠一个定时器。
+    定时器的超时时间默认为GlobalVar::client_header_timeout_。
+    @param[in] event_channel 监听对象。
+    @param[in] timeout       超时时间。
+    @return    true添加成功，false添加失败。
+    */
+    bool AddEpollEvent(Channel* event_channel, std::chrono::seconds timeout = GlobalVar::client_header_timeout_);
+
+    /*!
+    @brief 修改监听对象所要监听的事件。
+
+    @param[in] event_channel 监听对象。
+    @return    true修改成功，false修改失败。
+    */
+    bool ModEpollEvent(Channel* event_channel);
+
+    /*!
+    @brief 删除监听对象。
+
+    @param[in] event_channel 监听对象。
+    @return    true删除成功，false删除失败。
+    */
+    bool DelEpollEvent(Channel* event_channel);
+
+    /*!
+    @brief 开始监听。
+    */
+    void StartLoop();
+
+    /*!
+    @brief 清空事件池停止运行。
+    */
+    void QuitLoop();
+
+    /*!
+    @brief 返回连接数量。
+    */
+    int GetConnectionNum();
+
+    /*!
+    @brief 返回epoll内核事件表文件描述符。
+    */
+    [[maybe_unused]]int GetEpollfd(){return epollfd_;}
 private:
-    void GetActiveEventsAndProc();                                 //得到就绪事件并执行相应的回调函数
+    /*!
+    @brief 调用epoll_wait并根据事件调用其响应函数
+    */
+    void GetActiveEventsAndProc();
 };
-
 
 #endif //WEBSERVER_EVENTLOOP_H

@@ -9,7 +9,7 @@ int GlobalVar::total_user_num_ = 0;
 std::chrono::seconds GlobalVar::slot_interval_ = std::chrono::seconds(1);            /* NOLINT */
 std::chrono::seconds GlobalVar::client_header_timeout_ = std::chrono::seconds(30);   /* NOLINT */
 std::chrono::seconds GlobalVar::client_body_timeout_ = std::chrono::seconds(30);     /* NOLINT */
-std::chrono::seconds GlobalVar::keep_alive_timeout_ = std::chrono::seconds(5);      /* NOLINT */
+std::chrono::seconds GlobalVar::keep_alive_timeout_ = std::chrono::seconds(5);       /* NOLINT */
 int GlobalVar::slot_num_ = 60;
 const int kMaxBufferSize = 4096;
 char GlobalVar::favicon[555] = {
@@ -123,8 +123,16 @@ int BindAndListen(int port)
         close(listenfd);
         return -1;
     }
-    
-    /*监听队列长度为2048*/
+
+    /*!
+      从内核2.2版本之后，listen函数的backlog参数表示的是全连接的数量上限。
+      所谓全连接，指的是完成了tcp三次握手处于establish状态的连接。也就是
+      说，服务器能够同时与backlog个客户端进行tcp握手以建立连接，accept队
+      列的长度在任何时候都最多只能为backlog。在5.4版本之后backlog的默认最
+      大值为4096(定义在/proc/sys/net/core/somaxconn)。显然，backlog与
+      服务器的最大并发连接数量没有直接的关系，只会影响服务器允许同时发起连
+      接的客户端的数量。
+     */
     res = listen(listenfd,2048);
     if(res == -1)
     {

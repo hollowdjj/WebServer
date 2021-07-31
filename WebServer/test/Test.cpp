@@ -9,7 +9,11 @@
 #include <regex>
 #include "Utility.h"
 
-#include "spdlog/spdlog.h"
+
+class A{
+private:
+    A();
+};
 
 int main()
 {
