@@ -219,7 +219,7 @@ ssize_t ReadData(int fd,std::string& buffer,bool& disconnect)
         else if(read_once == 0)
         {
             /*一般情况下，recv返回0是由于客户端关闭连接导致的*/
-            ::GetLogger(")->debug("clinet {} has close the connection", fd);
+            ::GetLogger()->debug("clinet {} has close the connection", fd);
             disconnect = true;
             break;
         }
