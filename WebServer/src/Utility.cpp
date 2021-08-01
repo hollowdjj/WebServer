@@ -1,5 +1,7 @@
 #include "Utility.h"
-
+#include <getopt.h>
+#include <stdlib.h>
+#include <regex>
 
 ///////////////////////////
 //   Global    Variables //
@@ -91,7 +93,7 @@ int BindAndListen(int port)
     int listenfd = socket(PF_INET,SOCK_STREAM,0);
     if(listenfd == -1)
     {
-        ::GetLogger()->critical("create listen socket error: {}", strerror(errno));
+        ::GetLogger("../temp/log.txt")->critical("create listen socket error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -101,7 +103,7 @@ int BindAndListen(int port)
     int res = setsockopt(listenfd,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof reuse);
     if(res == -1)
     {
-        ::GetLogger()->error("set listen socket opt error: {}", strerror(errno));
+        ::GetLogger("../temp/log.txt")->error("set listen socket opt error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -119,7 +121,7 @@ int BindAndListen(int port)
     res = bind(listenfd,reinterpret_cast<sockaddr*>(&server_addr),sizeof server_addr);
     if(res == -1)
     {
-        ::GetLogger()->critical("listen socket bind error: {}",strerror(errno));
+        ::GetLogger("../temp/log.txt")->critical("listen socket bind error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -136,7 +138,7 @@ int BindAndListen(int port)
     res = listen(listenfd,2048);
     if(res == -1)
     {
-        ::GetLogger()->critical("listen error: {}",strerror(errno));
+        ::GetLogger("../temp/log.txt")->critical("listen error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -170,7 +172,7 @@ ssize_t ReadData(int fd, char* dest, size_t n)
             else if(errno == EAGAIN) return read_sum;  //当前无数据可读，返回已读取的字节数
             else
             {
-                ::GetLogger()->error("read data from filefd {} error: {}",fd, strerror(errno));
+                ::GetLogger("../temp/log.txt")->error("read data from filefd {} error: {}", fd, strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
@@ -210,14 +212,14 @@ ssize_t ReadData(int fd,std::string& buffer,bool& disconnect)
             else if(errno == EAGAIN || errno == EWOULDBLOCK) return read_sum; //当前无数据可读
             else
             {
-                ::GetLogger()->error("read data from socket {} error: {}",fd,strerror(errno));
+                ::GetLogger("../temp/log.txt")->error("read data from socket {} error: {}", fd, strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
         else if(read_once == 0)
         {
             /*一般情况下，recv返回0是由于客户端关闭连接导致的*/
-            ::GetLogger()->debug("clinet {} has close the connection",fd);
+            ::GetLogger("../temp/log.txt")->debug("clinet {} has close the connection", fd);
             disconnect = true;
             break;
         }
@@ -243,7 +245,7 @@ ssize_t WriteData(int fd, const char* source, size_t n)
             else if(errno == EAGAIN) return write_sum;   //客户端或者服务器自身的缓冲区已经写满了，返回
             else
             {
-                ::GetLogger()->error("write data to filefd {} error: {}",fd, strerror(errno));
+                ::GetLogger("../temp/log.txt")->error("write data to filefd {} error: {}", fd, strerror(errno));
                 return -1;                               //否则表示发生了错误，返回-1
             }
         }
@@ -284,7 +286,7 @@ ssize_t WriteData(int fd, std::string& buffer, bool& full)
             }
             else
             {
-                ::GetLogger()->error("write data to socket {} error: {}",fd, strerror(errno));
+                ::GetLogger("../temp/log.txt")->error("write data to socket {} error: {}", fd, strerror(errno));
                 return -1;                                                    //否则表示发生了错误，返回-1
             }
         }
@@ -337,11 +339,11 @@ ThreadPool::~ThreadPool()
     for (auto& item : workers_) item.join();
 }
 
-std::shared_ptr<spdlog::logger> GetLogger()
+std::shared_ptr<spdlog::logger> GetLogger(std::string path /*../temp/log.txt*/)
 {
     try
     {
-        static auto logger = spdlog::basic_logger_mt("basic_logger","../temp/log.txt");
+        static auto logger = spdlog::basic_logger_mt("basic_logger",path);
         return logger;
     }
     catch(const spdlog::spdlog_ex& ex)
@@ -352,4 +354,35 @@ std::shared_ptr<spdlog::logger> GetLogger()
     return {};
 }
 
-
+std::optional<std::tuple<int,size_t ,std::string>> ParaseCommand(int argc,char* argv[])
+{
+    const char* str = "p:s:l:";
+    int res,port,subreactor_num;
+    std::string log_file_path;
+    while((res = getopt(argc,argv,str)) != -1)
+    {
+        switch (res) {
+            case 'p':
+                port = atoi(optarg);
+                break;
+            case 's':
+                subreactor_num = atoi(optarg);
+                break;
+            case 'l':{
+                std::regex r(R"(^\.\S*)");
+                std::smatch results;
+                std::string s(optarg);
+                std::regex_match(s, results, r);
+                if(results.empty())
+                {
+                    printf("illegal log file path\n");
+                    return std::nullopt;
+                }
+                log_file_path = results[0];
+            }break;
+            default:
+                break;
+        }
+    }
+    return std::make_tuple(port,subreactor_num,log_file_path);
+}

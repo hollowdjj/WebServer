@@ -21,31 +21,31 @@ Channel::~Channel()
 void Channel::CallReadHandler()
 {
     if(read_handler_) read_handler_();
-    else ::GetLogger()->warn("read handler has not been registered yet");
+    else ::GetLogger("../temp/log.txt")->warn("read handler has not been registered yet");
 }
 
 void Channel::CallWriteHandler()
 {
     if(write_handler_) write_handler_();
-    else ::GetLogger()->warn("write handler has not been registered yet");
+    else ::GetLogger("../temp/log.txt")->warn("write handler has not been registered yet");
 }
 
 void Channel::CallErrorHandler()
 {
     if(error_handler_) error_handler_();
-    else ::GetLogger()->warn("error handler has not been registered yet");
+    else ::GetLogger("../temp/log.txt")->warn("error handler has not been registered yet");
 }
 
 void Channel::CallConnHandler()
 {
     if(conn_handler_) conn_handler_();
-    else ::GetLogger()->warn("connect handler has not been registered yet");
+    else ::GetLogger("../temp/log.txt")->warn("connect handler has not been registered yet");
 }
 
 void Channel::CallDisconnHandler()
 {
     if(disconn_handler_) disconn_handler_();
-    else ::GetLogger()->warn("disconnect handler has not been registered yet");
+    else ::GetLogger("../temp/log.txt")->warn("disconnect handler has not been registered yet");
 }
 
 void Channel::CallReventsHandlers()

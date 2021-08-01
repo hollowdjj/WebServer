@@ -25,6 +25,7 @@
 #include <future>
 #include <iostream>
 #include <chrono>
+#include <optional>
 
 /*Third-Party*/
 #include "spdlog/spdlog.h"
@@ -171,5 +172,16 @@ auto ThreadPool::AddTaskToPool(F&& f,Args&&... args) -> std::future<typename std
 /*!
 @brief 生成一个全局唯一的log对象。
 */
-std::shared_ptr<spdlog::logger> GetLogger();
+std::shared_ptr<spdlog::logger> GetLogger(std::string path = "../temp/log.txt");
+
+
+/*!
+@brief
+
+@param[in]
+@return tuple.first  端口号
+@return tuple.second subreactor数量
+@return tuple.third  日志文件路径
+*/
+std::optional<std::tuple<int,size_t ,std::string>> ParaseCommand(int argc,char* argv[]);
 #endif

@@ -41,7 +41,7 @@ bool EventLoop::AddEpollEvent(Channel* event_channel, std::chrono::seconds timeo
     event.events = (event_channel->GetEvents() | EPOLLET);
     if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&event) < 0)
     {
-        ::GetLogger()->error("epoll add error: {}", strerror(errno));
+        ::GetLogger("../temp/log.txt")->error("epoll add error: {}", strerror(errno));
         return false;
     }
     
@@ -78,7 +78,7 @@ bool EventLoop::ModEpollEvent(Channel* event_channel)
         event.events = (event_channel->GetEvents() | EPOLLET);
         if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&event) < 0)
         {
-            ::GetLogger()->error("epoll mod error: {}", strerror(errno));
+            ::GetLogger("../temp/log.txt")->error("epoll mod error: {}", strerror(errno));
             return false;
         }
     }
@@ -97,7 +97,7 @@ bool EventLoop::DelEpollEvent(Channel* event_channel)
     event.events = 0;
     if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,&event)<0)
     {
-        ::GetLogger()->error("epoll del error: {}", strerror(errno));
+        ::GetLogger("../temp/log.txt")->error("epoll del error: {}", strerror(errno));
         return false;
     }
 
@@ -123,10 +123,10 @@ void EventLoop::StartLoop()
     /*子线程需屏蔽SIGALRM信号*/
     if(!is_main_reactor_)
     {
-        sigset_t sigset;
-        sigemptyset(&sigset);
-        sigaddset(&sigset,SIGALRM);
-        assert(pthread_sigmask(SIG_BLOCK, &sigset,nullptr) == 0);
+//        sigset_t sigset;
+//        sigemptyset(&sigset);
+//        sigaddset(&sigset,SIGALRM);
+//        assert(pthread_sigmask(SIG_BLOCK, &sigset,nullptr) == 0);
     }
     /*监听*/
     while(!stop_)
@@ -166,7 +166,7 @@ void EventLoop::GetActiveEventsAndProc()
         if(active_event_num < 0 && errno != EINTR)
         {
             /*这里不对系统中断信号作出处理，程序照常运行*/
-            ::GetLogger()->error("eopll wait error: {}", strerror(errno));
+            ::GetLogger("../temp/log.txt")->error("eopll wait error: {}", strerror(errno));
             return;
         }
         else if(active_event_num == 0)
@@ -187,7 +187,7 @@ void EventLoop::GetActiveEventsAndProc()
             }
             else
             {
-                ::GetLogger()->warn("Set revents on emtpy Channel Object");
+                ::GetLogger("../temp/log.txt")->warn("Set revents on emtpy Channel Object");
             }
         }
     }
