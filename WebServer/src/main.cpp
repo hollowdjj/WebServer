@@ -27,7 +27,7 @@ static void SigThread(void* arg)
         ret = sigwait(sigset, &sig);
         if(ret != 0)
         {
-            ::GetLogger("../temp/log.txt")->error("sigwait error: {}", strerror(ret));
+            ::GetLogger()->error("sigwait error: {}", strerror(ret));
             exit(EXIT_FAILURE);
         }
         /*SIGALRM信号处理*/

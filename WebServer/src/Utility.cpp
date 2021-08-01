@@ -93,7 +93,7 @@ int BindAndListen(int port)
     int listenfd = socket(PF_INET,SOCK_STREAM,0);
     if(listenfd == -1)
     {
-        ::GetLogger("../temp/log.txt")->critical("create listen socket error: {}", strerror(errno));
+        ::GetLogger()->critical("create listen socket error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -103,7 +103,7 @@ int BindAndListen(int port)
     int res = setsockopt(listenfd,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof reuse);
     if(res == -1)
     {
-        ::GetLogger("../temp/log.txt")->error("set listen socket opt error: {}", strerror(errno));
+        ::GetLogger()->error("set listen socket opt error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -121,7 +121,7 @@ int BindAndListen(int port)
     res = bind(listenfd,reinterpret_cast<sockaddr*>(&server_addr),sizeof server_addr);
     if(res == -1)
     {
-        ::GetLogger("../temp/log.txt")->critical("listen socket bind error: {}", strerror(errno));
+        ::GetLogger()->critical("listen socket bind error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -138,7 +138,7 @@ int BindAndListen(int port)
     res = listen(listenfd,2048);
     if(res == -1)
     {
-        ::GetLogger("../temp/log.txt")->critical("listen error: {}", strerror(errno));
+        ::GetLogger()->critical("listen error: {}", strerror(errno));
         close(listenfd);
         return -1;
     }
@@ -172,7 +172,7 @@ ssize_t ReadData(int fd, char* dest, size_t n)
             else if(errno == EAGAIN) return read_sum;  //当前无数据可读，返回已读取的字节数
             else
             {
-                ::GetLogger("../temp/log.txt")->error("read data from filefd {} error: {}", fd, strerror(errno));
+                ::GetLogger()->error("read data from filefd {} error: {}", fd, strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
@@ -212,14 +212,14 @@ ssize_t ReadData(int fd,std::string& buffer,bool& disconnect)
             else if(errno == EAGAIN || errno == EWOULDBLOCK) return read_sum; //当前无数据可读
             else
             {
-                ::GetLogger("../temp/log.txt")->error("read data from socket {} error: {}", fd, strerror(errno));
+                ::GetLogger()->error("read data from socket {} error: {}", fd, strerror(errno));
                 return -1;                        //否则表示发生了错误，返回-1
             }
         }
         else if(read_once == 0)
         {
             /*一般情况下，recv返回0是由于客户端关闭连接导致的*/
-            ::GetLogger("../temp/log.txt")->debug("clinet {} has close the connection", fd);
+            ::GetLogger(")->debug("clinet {} has close the connection", fd);
             disconnect = true;
             break;
         }
@@ -245,7 +245,7 @@ ssize_t WriteData(int fd, const char* source, size_t n)
             else if(errno == EAGAIN) return write_sum;   //客户端或者服务器自身的缓冲区已经写满了，返回
             else
             {
-                ::GetLogger("../temp/log.txt")->error("write data to filefd {} error: {}", fd, strerror(errno));
+                ::GetLogger()->error("write data to filefd {} error: {}", fd, strerror(errno));
                 return -1;                               //否则表示发生了错误，返回-1
             }
         }
@@ -286,7 +286,7 @@ ssize_t WriteData(int fd, std::string& buffer, bool& full)
             }
             else
             {
-                ::GetLogger("../temp/log.txt")->error("write data to socket {} error: {}", fd, strerror(errno));
+                ::GetLogger()->error("write data to socket {} error: {}", fd, strerror(errno));
                 return -1;                                                    //否则表示发生了错误，返回-1
             }
         }

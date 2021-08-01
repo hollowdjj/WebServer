@@ -65,13 +65,13 @@ void HttpServer::NewConnHandler()
     int connfd = accept(listenfd_,reinterpret_cast<sockaddr*>(&client_addr),&client_addr_len);
     if(connfd < 0)
     {
-        ::GetLogger("../temp/log.txt")->error("accept error: {}", strerror(errno));
+        ::GetLogger()->error("accept error: {}", strerror(errno));
         return;
     }
     //限制服务器的最大并发连接数
     if(GlobalVar::GetTotalUserNum() >= GlobalVar::kMaxUserNum)
     {
-        ::GetLogger("../temp/log.txt")->warn("max user number limit");
+        ::GetLogger()->warn("max user number limit");
         close(connfd);
         return;
     }
@@ -106,20 +106,20 @@ void HttpServer::NewConnHandler()
     connfd_channel->SetHolder(new HttpData(sub_reactors_[index].get(),connfd_channel));
     if(sub_reactors_[index]->AddEpollEvent(connfd_channel))
     {
-        ::GetLogger("../temp/log.txt")->debug("new connection {} handled by subreactor {}", connfd, index);
+        ::GetLogger()->debug("new connection {} handled by subreactor {}", connfd, index);
         ++num_of_each[index];
     }
 
     /*打印当前每个SubReactor的连接数量*/
     for (int i = 0; i < num_of_each.size(); ++i)
     {
-        ::GetLogger("../temp/log.txt")->debug("Subreactor {} is handling {} connections", i, num_of_each[i]);
+        ::GetLogger()->debug("Subreactor {} is handling {} connections", i, num_of_each[i]);
     }
 
-    ::GetLogger("../temp/log.txt")->info("New connection {}, current user number: {}", connfd, GlobalVar::GetTotalUserNum());
+    ::GetLogger()->info("New connection {}, current user number: {}", connfd, GlobalVar::GetTotalUserNum());
 }
 
 void HttpServer::ErrorHandler()
 {
-    ::GetLogger("../temp/log.txt")->critical("Get an error from listen socket: {}", strerror(errno));
+    ::GetLogger()->critical("Get an error from listen socket: {}", strerror(errno));
 }

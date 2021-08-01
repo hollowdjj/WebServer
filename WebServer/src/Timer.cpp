@@ -11,7 +11,7 @@ Timer::Timer(size_t trigger_cycles, size_t slot_index)
 void Timer::CallExpiredHandler()
 {
     if(expired_sHandler_) expired_sHandler_();
-    else ::GetLogger("../temp/log.txt")->warn("expired handler has not been registered yet");
+    else ::GetLogger()->warn("expired handler has not been registered yet");
 }
 
 /*------------------------------TimerManager类----------------------------------*/
@@ -115,7 +115,7 @@ std::optional<std::pair<size_t /*cycle*/, size_t /*index*/>> TimeWheel::CalPosIn
 {
     if(timeout<std::chrono::seconds(0))
     {
-        ::GetLogger("../temp/log.txt")->warn("timeout can't be less than 0");
+        ::GetLogger()->warn("timeout can't be less than 0");
         return std::nullopt;
     }
     /*!

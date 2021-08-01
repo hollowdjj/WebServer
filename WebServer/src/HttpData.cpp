@@ -35,7 +35,7 @@ void HttpData::LinkTimer(Timer* p_timer)
 {
     if(!p_timer)
     {
-        ::GetLogger("../temp/log.txt")->error("can't link an empty timer");
+        ::GetLogger()->error("can't link an empty timer");
         return;
     }
     p_timer_ = p_timer;
@@ -48,7 +48,7 @@ void HttpData::ReadHandler()
     int fd = p_connfd_channel_->GetFd();
     bool disconnect = false;
     auto read_num = ReadData(fd, read_in_buffer_, disconnect);
-    if(read_num > 0) ::GetLogger("../temp/log.txt")->debug("client {} Request:\n{}\n", fd, read_in_buffer_.c_str());
+    if(read_num > 0) ::GetLogger()->debug("client {} Request:\n{}\n", fd, read_in_buffer_.c_str());
     else if(read_num < 0 || disconnect)
     {
         /*read_num < 0读取数据错误可能是socket连接出了问题，这个时候最好由服务端主动断开连接*/
@@ -178,19 +178,19 @@ void HttpData::DisConndHandler()
     if(p_sub_reactor_->DelEpollEvent(p_connfd_channel_))
     {
         GlobalVar::DecTotalUserNum();
-        ::GetLogger("../temp/log.txt")->info("Client {} disconnect, current user number: {}", fd, GlobalVar::GetTotalUserNum());
+        ::GetLogger()->info("Client {} disconnect, current user number: {}", fd, GlobalVar::GetTotalUserNum());
     }
 }
 
 void HttpData::ErrorHandler()
 {
-    ::GetLogger("../temp/log.txt")->error("Get an error form connect socket: {}", strerror(errno));
+    ::GetLogger()->error("Get an error form connect socket: {}", strerror(errno));
     DisConndHandler();
 }
 
 void HttpData::SetHttpErrorMsg(int fd, int error_num, std::string msg)
 {
-    ::GetLogger("../temp/log.txt")->debug("Client {} http error: {} {}", fd, error_num, msg.c_str());
+    ::GetLogger()->debug("Client {} http error: {} {}", fd, error_num, msg.c_str());
 
     /*编写响应报文的entidy body*/
     std::string response_body;
@@ -214,7 +214,7 @@ void HttpData::SetHttpErrorMsg(int fd, int error_num, std::string msg)
 void HttpData::ExpiredHandler()
 {
     int fd = p_connfd_channel_->GetFd();
-    ::GetLogger("../temp/log.txt")->debug("client {} timeout, shut it down", fd);
+    ::GetLogger()->debug("client {} timeout, shut it down", fd);
     SetHttpErrorMsg(fd, 408, "Request Time-out");
     WriteHandler();
 }
