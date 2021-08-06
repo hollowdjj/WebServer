@@ -23,7 +23,6 @@ class HttpData;
 class Channel {
 private:
     int fd_;                       //需要监听事件的文件描述符
-    bool is_listenfd_;             //表示fd_是否为监听socket
     bool is_connfd_;               //表示fd_是否为连接socket
     __uint32_t events_{};          //文件描述符fd_需要监听的事件
     __uint32_t revents_{};         //events_中的就绪事件
@@ -33,12 +32,11 @@ private:
     CallBack read_handler_;         //EPOLLIN的回调函数
     CallBack write_handler_;        //EPOLLOUT的回调函数
     CallBack error_handler_;        //EPOLLERR的回调函数
-    CallBack conn_handler_;         //接受连接的回调函数
     CallBack disconn_handler_;      //EPOLLRDHUP的回调函数
 
     HttpData* p_holder_{};          //只有连接socket才需要一个holder，监听socket不需要
 public:
-    Channel(int fd, bool is_listenfd, bool is_connfd);
+    Channel(int fd, bool is_connfd);
     ~Channel();
 
     /*!
@@ -60,12 +58,6 @@ public:
     [[maybe_unused]] __uint32_t GetRevents() {return revents_;}
 
     /*!
-    @brief set and get is_listenfd_.
-    */
-    [[maybe_unused]]void SetIsListenfd(bool is_listenfd) {is_listenfd_ = is_listenfd;}
-    [[maybe_unused]]bool IsListenfd()                    {return is_listenfd_;}
-
-    /*!
     @brief set and get is_connfd_.
     */
     [[maybe_unused]]void SetIsConnfd(bool is_connfd) {is_connfd_ = is_connfd;}
@@ -83,7 +75,6 @@ public:
     void SetReadHandler(CallBack read_handler)       { read_handler_ = std::move(read_handler);}
     void SetWriteHandler(CallBack write_handler)     { write_handler_ = std::move(write_handler);}
     void SetErrorHandler(CallBack error_handler)     { error_handler_ = std::move(error_handler);}
-    void SetConnHandler(CallBack conn_handler)       { conn_handler_ = std::move(conn_handler);}
     void SetDisconnHandler(CallBack disconn_handler) { disconn_handler_ = std::move(disconn_handler);}
 
     /*!
@@ -102,7 +93,6 @@ private:
     void CallReadHandler();
     void CallWriteHandler();
     void CallErrorHandler();
-    void CallConnHandler();
     void CallDisconnHandler();
 };
 

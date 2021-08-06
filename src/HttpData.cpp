@@ -184,7 +184,6 @@ void HttpData::DisConndHandler()
 
 void HttpData::ErrorHandler()
 {
-    ::GetLogger()->error("Get an error form connect socket: {}", strerror(errno));
     DisConndHandler();
 }
 
@@ -258,7 +257,7 @@ HeaderLinesParseState HttpData::ParseHeaderLines()
      */
     auto FormatCheck = [this](std::string& target) -> bool
     {
-        std::regex r(R"(^([A-Z]\S*)\:\s(.+)$)");
+        std::regex r(R"(^([[:alpha:]]\S*)\:\s(.+)$)");
         std::smatch results;
         std::regex_match(target,results,r);
         if(results.empty()) return false;

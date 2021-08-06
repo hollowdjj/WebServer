@@ -1,16 +1,11 @@
 #include "Channel.h"
 #include "Utility.h"
 
-Channel::Channel(int fd, bool is_listenfd, bool is_connfd)
+Channel::Channel(int fd, bool is_connfd)
                 : fd_(fd),
-                  is_listenfd_(is_listenfd),
                   is_connfd_(is_connfd)
 {
-    /*不能同时为监听socket和连接socket*/
-    if(is_listenfd==is_connfd && is_connfd)
-    {
-        assert(-1);
-    }
+
 }
 
 Channel::~Channel()
@@ -33,25 +28,18 @@ void Channel::CallWriteHandler()
 void Channel::CallErrorHandler()
 {
     if(error_handler_) error_handler_();
-    else ::GetLogger("../temp/log.txt")->warn("error handler has not been registered yet");
-}
-
-void Channel::CallConnHandler()
-{
-    if(conn_handler_) conn_handler_();
-    else ::GetLogger()->warn("connect handler has not been registered yet");
+    else ::GetLogger()->warn("error handler has not been registered yet");
 }
 
 void Channel::CallDisconnHandler()
 {
     if(disconn_handler_) disconn_handler_();
-    else ::GetLogger("../temp/log.txt")->warn("disconnect handler has not been registered yet");
+    else ::GetLogger()->warn("disconnect handler has not been registered yet");
 }
 
 void Channel::CallReventsHandlers()
 {
-    if(is_listenfd_ && (revents_ & EPOLLIN))  CallConnHandler();
-    else if(revents_ & EPOLLERR)
+    if(revents_ & EPOLLERR)
     {
         CallErrorHandler();
         return;
@@ -60,7 +48,7 @@ void Channel::CallReventsHandlers()
         CallWriteHandler();
     else if(revents_ & EPOLLRDHUP)
         CallDisconnHandler();
-    else if(revents_ & (EPOLLIN | EPOLLRDHUP))
+    else if(revents_ & EPOLLIN)
         CallReadHandler();
 }
 

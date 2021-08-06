@@ -80,9 +80,9 @@ int main(int argc,char* argv[])
     sleep(0.5);
     if(sockfd > 0)
     {
-        auto buf = post.c_str();
+        auto buf = get.c_str();
         std::cout<<"----------------------send------------------------"<<std::endl;
-        std::cout<<post<<std::endl;
+        std::cout<<get<<std::endl;
         ssize_t res = send(sockfd, buf, strlen(buf), 0);
         
         ++conn_num;

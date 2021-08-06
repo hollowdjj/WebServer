@@ -23,15 +23,14 @@ class HttpData;
 
 class EventLoop {
 private:
-    std::mutex mutex_for_wakeup_;                                 //用于休眠线程的互斥锁
-    std::condition_variable cond_;                                //条件变量
     std::mutex mutex_for_conn_num_;                               //避免访问连接数量造成竞争
     int connection_num_{};                                        //Reactor管理的http连接的数量
-    int channle_num_{};                                           //Reactor管理的事件数量
 
     bool stop_ = false;                                                     //指示Sub/Main-Reactor是否工作，默认为正在工作
     int epollfd_;                                                           //epoll内核事件表
-    std::vector<epoll_event> active_events_;                                //就绪事件池
+    static const int kMaxActiveEventNum = 4096;
+    static const int kEpollTimeOut = 10000;                                 //epoll超时时间10秒(单位为毫秒)
+    epoll_event active_events_[kMaxActiveEventNum];                         //就绪事件池
     std::unique_ptr<Channel> events_channel_pool_[GlobalVar::kMaxUserNum];  //事件池
     std::unique_ptr<HttpData> http_data_pool_[GlobalVar::kMaxUserNum];      //每一个连接socket的Channel都会对应一个HttpData对象
 

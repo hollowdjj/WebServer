@@ -36,7 +36,6 @@ static void SigThread(void* arg)
             const char* msg = "Tick";
             for (auto& tick_fd : server->tickfds_)
             {
-                //TODO 可能没有写出数据 子线程屏蔽信号
                 WriteData(tick_fd,msg, strlen(msg));
             }
             alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval_).count());

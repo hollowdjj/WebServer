@@ -14,6 +14,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <assert.h>
+#include <netinet/tcp.h>
 
 /*STD Headers*/
 #include <vector>
@@ -75,6 +76,11 @@ private:
 @brief 将文件描述符fd设置为非阻塞模式。
 */
 int SetNonBlocking(int fd);
+
+/*!
+@brief 设置TCP_NODELAY
+*/
+void SetSocketNoDelay(int fd);
 
 /*!
 @brief 绑定端口号并监听。成功时返回监听socket的文件描述符，否则返回-1。全连接队列长度设为2048。

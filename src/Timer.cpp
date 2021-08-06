@@ -23,7 +23,7 @@ TimeWheel::TimeWheel()
     assert(res != -1);
     SetNonBlocking(tick_fd_[0]);
     SetNonBlocking(tick_fd_[1]);
-    p_tickfd_channel_ = new Channel(tick_fd_[0], false, false);
+    p_tickfd_channel_ = new Channel(tick_fd_[0], false);
     p_tickfd_channel_->SetEvents(EPOLLIN);
     p_tickfd_channel_->SetReadHandler([this](){Tick();});
 }

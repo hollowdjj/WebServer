@@ -9,9 +9,9 @@
 std::mutex GlobalVar::mutex_{};
 int GlobalVar::total_user_num_ = 0;
 std::chrono::seconds GlobalVar::slot_interval_ = std::chrono::seconds(1);            /* NOLINT */
-std::chrono::seconds GlobalVar::client_header_timeout_ = std::chrono::seconds(30);   /* NOLINT */
-std::chrono::seconds GlobalVar::client_body_timeout_ = std::chrono::seconds(30);     /* NOLINT */
-std::chrono::seconds GlobalVar::keep_alive_timeout_ = std::chrono::seconds(5);       /* NOLINT */
+std::chrono::seconds GlobalVar::client_header_timeout_ = std::chrono::seconds(60);   /* NOLINT */
+std::chrono::seconds GlobalVar::client_body_timeout_ = std::chrono::seconds(60);     /* NOLINT */
+std::chrono::seconds GlobalVar::keep_alive_timeout_ = std::chrono::seconds(60);      /* NOLINT */
 int GlobalVar::slot_num_ = 60;
 const int kMaxBufferSize = 4096;
 char GlobalVar::favicon[555] = {
@@ -82,9 +82,18 @@ char GlobalVar::favicon[555] = {
 int SetNonBlocking(int fd)
 {
     int old_option = fcntl(fd,F_GETFL);
+    if(old_option == -1) return -1;
+
     int new_option = old_option | O_NONBLOCK;
-    fcntl(fd,F_SETFL,new_option);
-    return old_option;
+    if(fcntl(fd,F_SETFL,new_option) == -1) return -1;
+
+    return 0;
+}
+
+void SetSocketNoDelay(int fd)
+{
+    int enable = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void*)&enable, sizeof(enable));
 }
 
 int BindAndListen(int port)

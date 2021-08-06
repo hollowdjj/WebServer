@@ -10,9 +10,8 @@ aux_source_directory(./src SRC_LIST)
 
 add_executable(WebServer ${SRC_LIST})
 add_executable(client ./test/HttpClient.cpp)
+add_executable(stress ./test/StressTest.cpp)
 add_executable(Test ./test/Test.cpp)
-
-
 
 include(FetchContent)
 FetchContent_Declare(	spdlog	#库名字

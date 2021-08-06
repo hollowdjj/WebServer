@@ -3,12 +3,6 @@
 #include "Channel.h"
 #include "HttpData.h"
 
-///////////////////////////
-//   Global    Variables //
-///////////////////////////
-const int kEpollTimeOut = 10000;             //epoll超时时间10秒(单位为毫秒)
-const int kMaxActiveEventNum = 4096;         //最多监听4096个事件
-
 EventLoop::EventLoop(bool is_main_reactor /*false*/)
                     : epollfd_(epoll_create1(EPOLL_CLOEXEC)),
                       is_main_reactor_(is_main_reactor)
@@ -18,9 +12,8 @@ EventLoop::EventLoop(bool is_main_reactor /*false*/)
         实际上，内核epoll事件表是会动态增长的，因此没有必要使用epoll_create了
      */
     assert(epollfd_ != -1);
-    active_events_.resize(kMaxActiveEventNum);
     /*只有SubReactor才需要监听管道的读端*/
-    if(!is_main_reactor) assert(AddEpollEvent(timewheel_.GetTickfdChannel()));
+    if(!is_main_reactor_) assert(AddEpollEvent(timewheel_.GetTickfdChannel()));
 }
 
 EventLoop::~EventLoop()
@@ -59,8 +52,6 @@ bool EventLoop::AddEpollEvent(Channel* event_channel, std::chrono::seconds timeo
             ++connection_num_;
         }
     }
-    cond_.notify_one();
-    ++channle_num_;
 
     return true;
 }
@@ -113,29 +104,15 @@ bool EventLoop::DelEpollEvent(Channel* event_channel)
         }
     }
     events_channel_pool_[fd].reset(nullptr);
-    --channle_num_;
 
     return true;
 }
 
 void EventLoop::StartLoop()
 {
-    /*子线程需屏蔽SIGALRM信号*/
-    if(!is_main_reactor_)
-    {
-//        sigset_t sigset;
-//        sigemptyset(&sigset);
-//        sigaddset(&sigset,SIGALRM);
-//        assert(pthread_sigmask(SIG_BLOCK, &sigset,nullptr) == 0);
-    }
     /*监听*/
     while(!stop_)
     {
-        /*事件池为空时休眠*/
-        {
-            std::unique_lock<std::mutex> locker(mutex_for_wakeup_);
-            cond_.wait(locker,[this](){return channle_num_ > 0;});
-        }
         /*获取事件池中的就绪事件并调用相应的回调函数*/
         GetActiveEventsAndProc();
     }
@@ -149,7 +126,6 @@ void EventLoop::QuitLoop()
     {
         if(i) DelEpollEvent(i.get());    //断开所有连接
     }
-    cond_.notify_all();
 }
 
 int EventLoop::GetConnectionNum()
@@ -162,7 +138,7 @@ void EventLoop::GetActiveEventsAndProc()
 {
     while(!stop_)
     {
-        int active_event_num = epoll_wait(epollfd_,&active_events_[0],kMaxActiveEventNum,kEpollTimeOut);
+        int active_event_num = epoll_wait(epollfd_,active_events_,kMaxActiveEventNum,kEpollTimeOut);
         if(active_event_num < 0 && errno != EINTR)
         {
             /*这里不对系统中断信号作出处理，程序照常运行*/
