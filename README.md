@@ -2,13 +2,13 @@
 
 ## Introduction
 
-本项目为一个基于C++17编写的Web服务器。支持GET、HEAD以及POST方法。支持HTTP长连接、短连接，以及管线化请求。日志使用[spdlog](https://github.com/gabime/spdlog)。
+一个基于C++17的Web服务器。支持GET、HEAD以及POST方法。支持HTTP长连接、短连接，以及管线化请求。日志使用[spdlog](https://github.com/gabime/spdlog)。
 
 ## Envoirment
 
 - OS: Ubuntu 20.04
 - Complier: g++ 9.3.0
-- CMake:  3.19
+- CMake:  3.20
 
 ## Build
 
@@ -20,7 +20,7 @@ make
 
 ## Usage
 
-cd ../bin
+cd ../bin/release
 
 ./WebServer [-p port_number] [-s subreactor_number ] [-l log_file_path(start with .)]
 
