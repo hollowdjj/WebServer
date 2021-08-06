@@ -10,7 +10,7 @@ HttpServer::HttpServer(int port, EventLoop* main_reactor,ThreadPool* sub_thread_
               p_sub_thread_pool_(sub_thread_pool),
               p_listen_channel_(new Channel(listenfd_, false))
 {
-    assert(listenfd_ != -1);
+    if(listenfd_ == -1) exit(-1);
     port_ = port;
     SetNonBlocking(listenfd_);
 }

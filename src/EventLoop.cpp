@@ -9,11 +9,14 @@ EventLoop::EventLoop(bool is_main_reactor /*false*/)
 {
     /*!
         注意，这里没有使用epoll_create。这是因为，epoll_create函数的size参数只是一个参考
-        实际上，内核epoll事件表是会动态增长的，因此没有必要使用epoll_create了
+        实际上，内核epoll事件表是会动态增长的，因此没有必要使用epoll_create了。并且只有Sub
+        Reactor才需要监听管道的读端
      */
-    assert(epollfd_ != -1);
-    /*只有SubReactor才需要监听管道的读端*/
-    if(!is_main_reactor_) assert(AddEpollEvent(timewheel_.GetTickfdChannel()));
+    if(!AddEpollEvent(timewheel_.GetTickfdChannel()) || epollfd_ == -1)
+    {
+        ::GetLogger()->critical("epoll_create1 error: {}", strerror(errno));
+        exit(-1);
+    }
 }
 
 EventLoop::~EventLoop()

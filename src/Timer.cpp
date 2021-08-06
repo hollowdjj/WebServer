@@ -20,7 +20,11 @@ TimeWheel::TimeWheel()
     slots_.resize(GlobalVar::slot_num_);
     /*创建一个管道，通过监听tick_fd_[0]可读事件的形式定时让时间轮tick一下*/
     int res = pipe(tick_fd_);
-    assert(res != -1);
+    if(res == -1)
+    {
+        ::GetLogger()->critical("create tick pipe error: {}", strerror(errno));
+        exit(-1);
+    }
     SetNonBlocking(tick_fd_[0]);
     SetNonBlocking(tick_fd_[1]);
     p_tickfd_channel_ = new Channel(tick_fd_[0], false);

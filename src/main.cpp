@@ -62,8 +62,9 @@ int main(int argc,char* argv[])
     auto res = ParaseCommand(argc,argv);
     if(!res)
     {
+    	printf("command error\n");
         printf("usage: %s [-p port_number] [-s subreactor_number ] [-l log_file_path(start with .)]",basename(argv[0]));
-        return 0;
+        return -1;
     }
 
     /*开启日志*/
@@ -83,13 +84,17 @@ int main(int argc,char* argv[])
     sigaddset(&sigset,SIGALRM);
     sigaddset(&sigset,SIGTERM);
     sigaddset(&sigset,SIGPIPE);
-    assert(pthread_sigmask(SIG_BLOCK, &sigset,nullptr) == 0);
+    if(pthread_sigmask(SIG_BLOCK, &sigset,nullptr) != 0)
+    {
+        printf("set signal mask error: %s", strerror(errno));
+        return -1;
+    }
 
     /*创建一个线程池。注意主线程不在线程池中*/
     ThreadPool thread_pool(std::get<1>(*res));
     EventLoop main_reactor = EventLoop(true);
     server = CreateHttpServer(std::get<0>(*res), &main_reactor, &thread_pool);
-
+	
     /*开启一个后台信号处理函数*/
     std::thread sig_thread(SigThread,(void*)&sigset);
     sig_thread.detach();
@@ -98,6 +103,5 @@ int main(int argc,char* argv[])
     server->Start();
     alarm(std::chrono::duration_cast<std::chrono::seconds>(GlobalVar::slot_interval_).count());
     main_reactor.StartLoop();
-
     return 0;
 }
